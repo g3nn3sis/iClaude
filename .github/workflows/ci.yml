@@ -68,6 +68,12 @@ jobs:
           docker compose down
           docker compose up -d --no-build
           docker compose exec -T iclaude iclaude-container check authorised
+      - name: Factory reset keeps logins and config
+        run: |
+          docker compose exec -T iclaude sh -c 'mkdir -p ~/.claude/projects/-workspace /workspace/repo && echo {} > ~/.claude/.credentials.json && echo {} > ~/.inkbox-claude/sessions.json && echo x > /workspace/repo/f'
+          ./iclaude reset --yes
+          docker compose exec -T iclaude iclaude-container check authorised
+          docker compose exec -T iclaude sh -c 'test -f ~/.claude/.credentials.json && test ! -e ~/.claude/projects && test ! -e ~/.inkbox-claude/sessions.json && test -z "$(ls -A /workspace)"'
           docker compose down -v
       - name: Installer (non-interactive)
         run: |

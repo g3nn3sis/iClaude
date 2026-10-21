@@ -58,6 +58,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
 | `./iclaude update` | Pull the latest version, rebuild and restart; rolls back if checks start failing |
 | `./iclaude auto-update [on\|off\|status]` | Daily automatic updates (cron, around 04:00 server time) |
+| `./iclaude reset` | Factory reset: forget conversations, memory and workspace files, keep logins and config |
 | `./iclaude uninstall [--purge]` | Remove iClaude; `--purge` also deletes your data |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
 
@@ -111,6 +112,16 @@ hand. Results are logged to `~/.local/state/iclaude/update.log` and shown by
 `iclaude auto-update status`. Auto-update follows the branch you installed (default `master`),
 so every change merged there reaches your server. Install with `--ref <tag>` to stay on a
 fixed release; updates are then manual.
+
+## Factory reset
+
+`iclaude reset` starts iClaude over without logging in again. It stops the container, then
+deletes every conversation and Claude session, Claude's memory and history, all files in
+`/workspace`, and your edits to `~/.claude/CLAUDE.md` (the default is reinstalled). It keeps
+the Claude login, the Inkbox setup and signing key, the authorised contacts, the `gh` login,
+git config and your Claude settings and skills. You confirm by typing `reset`; `--yes` skips
+that. Inkbox's per-contact memories are stored by Inkbox, so delete those in the Inkbox
+Console if you want them gone too.
 
 ## Uninstall
 

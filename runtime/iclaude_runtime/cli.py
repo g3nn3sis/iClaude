@@ -170,6 +170,24 @@ def _probe(path: str) -> dict | None:
         return None
 
 
+def cmd_reset(confirmed: bool) -> int:
+    from .reset import plan, reset_state
+
+    home, workspace = Path.home(), Path(os.environ.get("CLAUDE_PROJECT_DIR", "/workspace"))
+    if _probe("/health") is not None:
+        print(f"{RED}The bridge is running. Use ./iclaude reset on the host, which stops it first.{RESET}")
+        return 1
+    if not confirmed:
+        print("Would remove:")
+        for path in plan(home, workspace):
+            print(f"  {path}")
+        print("Run with --yes to delete these.")
+        return 0
+    removed = reset_state(home, workspace)
+    print(f"{GREEN}Reset complete{RESET}: removed {len(removed)} items. Logins and config were kept.")
+    return 0
+
+
 def cmd_healthcheck() -> int:
     result = _probe("/ready")
     return 0 if result and result.get("ready") else 1
@@ -186,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("names", nargs="*", help="only these checks, e.g. claude, inkbox, webhook, authorised")
     sub.add_parser("healthcheck", help="Docker health probe")
     sub.add_parser("connectors", help="list the MCP connectors a bridged Claude session can reach")
+    reset = sub.add_parser("reset", help="forget conversations, memory and workspace files; keep logins and config")
+    reset.add_argument("--yes", action="store_true", help="delete (otherwise only list what would be removed)")
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
     allow.add_argument("contacts", nargs="*")
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
@@ -206,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if all(c.ok for c in checks) else 1
     if args.command == "healthcheck":
         return cmd_healthcheck()
+    if args.command == "reset":
+        return cmd_reset(args.yes)
     if args.command == "connectors":
         from .connectors import report
 
