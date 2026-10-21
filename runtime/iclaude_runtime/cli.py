@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 from .checks import Check, effective_env, env_file_path, parse_contacts, preflight
-from . import approvals, manage
+from . import approvals, chat_flow, manage
 from .defaults import memory_environment, seed_claude_md
 
 GREEN, RED, YELLOW, BOLD, RESET = ("\033[32m", "\033[31m", "\033[33m", "\033[1m", "\033[0m") if sys.stdout.isatty() else ("",) * 5
@@ -126,6 +126,20 @@ def cmd_auto_mode(action: str) -> int:
     else:
         print("Claude Code auto mode is off: actions outside the read-only set are texted to you for approval.")
         print("Turn on with: ./iclaude auto-mode on")
+    return 0
+
+
+def cmd_replies(choice: str | None) -> int:
+    if choice:
+        _save(chat_flow.SETTING, choice)
+    current = chat_flow.style({**effective_env(), **({chat_flow.SETTING: choice} if choice else {})})
+    if current == "natural":
+        print("Replies: natural. Over iMessage and SMS Claude sends a short heads-up when it starts on something,")
+        print(f"an update at real milestones (at most one every {int(chat_flow.UPDATE_GAP_SECONDS)}s), then the result, one text per paragraph.")
+        print("Switch to one message per reply with: ./iclaude replies single")
+    else:
+        print("Replies: single. Claude sends one message when it is done.")
+        print("Switch to heads-up, updates and short texts with: ./iclaude replies natural")
     return 0
 
 
@@ -262,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("categories", nargs="*", help=f"{', '.join(approvals.BY_NAME)} or all")
     auto_mode = sub.add_parser("auto-mode", help="Claude Code auto mode: a classifier approves routine actions")
     auto_mode.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
+    replies = sub.add_parser("replies", help="natural (heads-up, updates, short texts) or single message replies")
+    replies.add_argument("style", nargs="?", choices=list(chat_flow.STYLES))
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
     allow.add_argument("contacts", nargs="*")
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
@@ -291,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         from .connectors import report
 
         return report()
+    if args.command == "replies":
+        return cmd_replies(args.style)
     if args.command == "auto-mode":
         return cmd_auto_mode(args.action)
     if args.command == "approve":

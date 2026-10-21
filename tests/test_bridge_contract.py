@@ -97,3 +97,15 @@ def test_permission_callback_used_by_auto_approve():
     assert list(inspect.signature(sessions.ContactSession._can_use_tool).parameters) == ["self", "tool_name", "input_data", "context"]
     source = inspect.getsource(sessions.ContactSession._ensure_client)
     assert "can_use_tool=self._can_use_tool" in source and '"append": prompt_append' in source
+
+
+def test_reply_internals_used_by_natural_replies():
+    import inspect
+
+    from inkbox_claude import sessions
+
+    assert list(inspect.signature(sessions.ContactSession._deliver_reply).parameters) == ["self", "turn", "reply"]
+    assert list(inspect.signature(sessions.ContactSession._reply).parameters) == ["self", "text"]
+    run_turn = inspect.getsource(sessions.ContactSession._run_turn)
+    assert "client.receive_response()" in run_turn and "await self._deliver_reply(turn, reply)" in run_turn
+    assert {"future", "checkpoint", "cancelled", "mode", "reply_meta"} <= set(sessions._Turn.__dataclass_fields__)

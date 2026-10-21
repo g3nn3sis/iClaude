@@ -116,3 +116,67 @@ def test_install_auto_approves_enabled_categories_and_tells_claude(tmp_path, mon
     assert manual.options.system_prompt["append"].startswith("bridge\n\n## Auto-approved actions")
     assert manual.options.permission_mode is None
     assert auto.options.permission_mode == "auto"
+
+
+
+def _bridge_session(sessions):
+    from contextvars import ContextVar
+
+    sent = []
+
+    async def send_fn(chat_id, text, mode, meta):
+        sent.append((text, bool(meta.get("final_reply"))))
+
+    async def receipt(*args, **kwargs):
+        return None
+
+    turn = SimpleNamespace(mode="imessage", reply_meta={}, future=None, checkpoint=None, cancelled=False)
+    session = sessions.ContactSession.__new__(sessions.ContactSession)
+    session.__dict__.update(chat_id="c1", mode="imessage", reply_meta={}, send_fn=send_fn, receipt=receipt,
+                            _current_turn=turn, _interrupting=False, _shutting_down=False, _client_generation=0,
+                            _delivery_turn=None, on_send_rejected=None, _control_route=ContextVar("r", default=None))
+    return session, turn, sent
+
+
+def test_natural_replies_stream_updates_and_split_the_result(monkeypatch):
+    sdk = pytest.importorskip("claude_agent_sdk")
+    sessions = pytest.importorskip("inkbox_claude.sessions")
+
+    hooks.install(None, lambda: {})
+    from iclaude_runtime import chat_flow
+    monkeypatch.setattr(chat_flow, "BUBBLE_PAUSE_SECONDS", 0)
+    session, turn, sent = _bridge_session(sessions)
+    text = lambda t: sdk.AssistantMessage(content=[sdk.TextBlock(t)], model="m")
+    tool = lambda n: sdk.AssistantMessage(content=[sdk.ToolUseBlock("id", n, {})], model="m")
+    messages = [text("On it, checking your calendar"), tool("search_events"), text("Still looking"), tool("Read"),
+                text("You're free at 1pm.\n\nWant me to book it?")]
+
+    class Client:
+        async def receive_response(self):
+            for m in messages:
+                yield m
+
+    client = Client()
+    hooks.stream_updates(client, session)
+
+    async def run():
+        seen = [m async for m in client.receive_response()]
+        assert seen == messages
+        await sessions.ContactSession._deliver_reply(session, turn, "On it, checking your calendar\n\nYou're free at 1pm.\n\nWant me to book it?")
+
+    asyncio.run(run())
+    assert sent == [("On it, checking your calendar", False), ("You're free at 1pm.", False), ("Want me to book it?", True)]
+
+
+def test_single_style_and_other_channels_keep_one_message():
+    pytest.importorskip("claude_agent_sdk")
+    sessions = pytest.importorskip("inkbox_claude.sessions")
+
+    env = {"ICLAUDE_REPLY_STYLE": "single"}
+    hooks.install(None, lambda: env)
+    session, turn, sent = _bridge_session(sessions)
+    asyncio.run(sessions.ContactSession._deliver_reply(session, turn, "a\n\nb"))
+    env.clear()
+    turn.mode = "email"
+    asyncio.run(sessions.ContactSession._deliver_reply(session, turn, "c\n\nd"))
+    assert sent == [("a\n\nb", True), ("c\n\nd", True)]

@@ -30,6 +30,9 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
   commands and file edits always ask
 - Claude Code auto mode (`iclaude auto-mode on|off`): sets `permissions.defaultMode` to `auto`
   in the user settings, so a safety classifier approves routine actions instead of texts
+- Natural replies (`iclaude replies natural|single`, natural by default): over iMessage and
+  SMS a heads-up when work starts, throttled progress updates, and the result split into one
+  text per paragraph
 - Morning briefing (`iclaude briefing`), calendar heads-ups over CalDAV, a usage warning
   before the limit, and GitHub, Vercel and Cloudflare Pages alerts, all polled without
   Claude usage

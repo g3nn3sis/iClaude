@@ -50,6 +50,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude login` | Claude subscription login (rerun if credentials expire) |
 | `./iclaude setup` | Inkbox setup wizard and contact allowlist; rerun to reconfigure |
 | `./iclaude allow [+15551234567 \| me@icloud.com]` | Show or add authorised contacts (`--remove`, `--replace`) |
+| `./iclaude replies [natural\|single]` | Heads-up, progress updates and short texts (default), or one message per reply |
 | `./iclaude auto-mode [on\|off\|status]` | Claude Code auto mode: a safety classifier approves routine actions instead of texting you (see [Auto-approve](#auto-approve)) |
 | `./iclaude approve [on\|off calendar email …]` | Show or change which actions run without asking you first (see [Auto-approve](#auto-approve)) |
 | `./iclaude start` / `stop` / `restart` | Control the container |
@@ -140,6 +141,13 @@ injected instructions, but Claude Code's docs are clear it "does not guarantee s
 settings apply to every authorised contact.
 
 ## Conversations and memory
+
+- **Texts like a person.** Over iMessage and SMS, Claude sends a short heads-up when it starts
+  on something that takes a while ("On it, checking your calendar"), a one-line update at real
+  milestones, then the result, one text per paragraph. Updates are capped at one every 20
+  seconds and four per request, so it never becomes play-by-play, and quick questions get
+  a plain answer. `iclaude replies single` goes back to one message per reply. Email, Slack,
+  calls and group chats always get one reply.
 
 - **One conversation per contact.** The bridge keys each Claude session by Inkbox contact and
   resumes it after restarts. Text `/clear` to start fresh or `/resume` to pick an older one.
