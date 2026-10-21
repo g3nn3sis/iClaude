@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Host-side control script for iClaude. Run from the repository directory.
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+die() { echo "iclaude: $*" >&2; exit 1; }
+
+command -v docker >/dev/null 2>&1 || die "Docker is not installed. See https://docs.docker.com/engine/install/"
+docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is missing (the 'docker compose' plugin)."
+docker info >/dev/null 2>&1 || die "Cannot reach the Docker daemon. Is it running, and is your user in the 'docker' group?"
+
+compose() { docker compose "$@"; }
+running() { [ -n "$(compose ps --status running -q iclaude 2>/dev/null)" ]; }
+tty_flag() { [ -t 0 ] && [ -t 1 ] || echo "-T"; }
+in_container() {
+  if running; then
+    compose exec $(tty_flag) iclaude iclaude-container "$@"
+  else
+    compose run --rm $(tty_flag) iclaude "$@"
+  fi
+}
+
+usage() {
+  cat <<'EOF'
+Usage: ./iclaude <command>
+
+  setup            Inkbox setup wizard and contact allowlist (stops the bridge while it runs)
+  login            Log in to Claude with your Pro/Max subscription
+  allow [contact]  Show or add authorised contacts (+E.164 phone or email); --remove, --replace
+  start            Build if needed and start iClaude in the background
+  stop             Stop iClaude
+  restart          Restart iClaude
+  status           Container state, health and preflight checks
+  logs [-f]        Show bridge logs
+  doctor           Full diagnostics (iClaude + Inkbox bridge doctor)
+  update           Pull the latest iClaude, rebuild and restart
+  shell            Open a shell inside the container
+EOF
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  setup)
+    if running; then compose stop iclaude; fi
+    compose run --rm iclaude setup || true
+    compose up -d
+    ;;
+  login)
+    compose run --rm iclaude login
+    if running; then compose restart iclaude; fi
+    ;;
+  allow)
+    in_container allow "$@"
+    if [ $# -gt 0 ] && running; then compose restart iclaude; fi
+    ;;
+  start) compose up -d --build ;;
+  stop) compose stop ;;
+  restart) compose restart ;;
+  status)
+    compose ps
+    in_container check || true
+    ;;
+  logs) compose logs --tail=200 "$@" iclaude ;;
+  doctor) in_container doctor ;;
+  update)
+    if [ -d .git ]; then git pull --ff-only; fi
+    compose build --pull
+    compose up -d
+    ;;
+  shell) in_container shell ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

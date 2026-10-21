@@ -1,0 +1,33 @@
+name: iclaude
+
+services:
+  iclaude:
+    image: ${ICLAUDE_IMAGE:-iclaude:local}
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${ICLAUDE_BASE_IMAGE:-node:22-bookworm-slim}
+    container_name: iclaude
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      TZ: ${TZ:-UTC}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+    volumes:
+      - home:/home/iclaude
+      - workspace:/workspace
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  home:
+  workspace:

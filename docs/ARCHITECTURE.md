@@ -1,0 +1,89 @@
+# iClaude architecture and plan
+
+iClaude is a thin deployment layer. The [Inkbox Claude Code bridge](https://github.com/inkbox-ai/claude-code-plugin)
+does all messaging, tunnelling, webhook verification, contact-keyed sessions and
+permission escalation. iClaude packages it into a supervised container, adds the
+security checks a public-facing deployment needs, and wraps setup in a few commands.
+
+## What the upstream bridge already provides (reused, not rebuilt)
+
+Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
+
+| Need | Upstream feature |
+|---|---|
+| iMessage, SMS, email, voice | `inkbox-claude run` gateway |
+| Inbound connectivity without open ports | Inkbox tunnel opened on start |
+| Webhook signature verification | `INKBOX_SIGNING_KEY`, `INKBOX_REQUIRE_SIGNATURE=true` by default |
+| Inkbox signup, identity, iMessage connect, signing key | `inkbox-claude setup` wizard |
+| Contact-keyed Claude sessions across restarts | `~/.inkbox-claude/sessions.json` + Claude transcripts in `~/.claude/projects` |
+| Approval texts for dangerous tools | `can_use_tool` escalation; read-only tools auto-allowed |
+| Per-contact memory | Inkbox contact memories injected per contact (`INKBOX_CONTACT_MEMORIES_ENABLED`) |
+| CLAUDE.md / settings | `setting_sources=["user", "project"]` |
+| Health | `/health` (liveness) and `/ready` (includes Claude auth) on port 8767 |
+| Diagnostics | `inkbox-claude doctor` |
+
+## What iClaude adds
+
+1. **Image** (`Dockerfile`): Debian bookworm, Python venv with the pinned bridge,
+   `gh` (checksum-verified), Git, Node 22, non-root `iclaude` user (uid 1000).
+2. **One Claude binary.** The Agent SDK runs its own bundled Claude Code, so the image
+   links that binary as `claude` instead of installing a second copy from npm. Login,
+   `auth status` and the bridge always use the same version.
+3. **Supervision** (`compose.yaml`): `restart: unless-stopped`, `init: true`, read-only
+   root filesystem, all capabilities dropped, `no-new-privileges`, log rotation,
+   no published ports (the Inkbox tunnel is outbound).
+4. **Persistence**: one named volume for `/home/iclaude` (Claude credentials and
+   `.claude.json`, bridge `.env`, sessions, media, `gh` auth, git config) and one for
+   `/workspace` (Claude's project directory).
+5. **Preflight gate** (`runtime/iclaude_runtime`): the container only execs the bridge
+   when every check passes, and otherwise waits and rechecks every 30 s, so
+   a half-configured deployment never crash-loops or runs insecurely:
+   - Claude is logged in (`claude auth status`)
+   - Inkbox identity and signing key exist, signatures not disabled
+   - an explicit contact allowlist is set and `INKBOX_ALLOW_ALL_USERS` is not true
+   - no `bypassPermissions` default mode in user or workspace settings
+   - workspace is writable
+6. **Docker-aware setup**: runs the upstream wizard unchanged except for two steps.
+   Project directory is fixed to the workspace volume, and systemd/launchd autostart
+   is replaced by Docker's restart policy. After the wizard it asks for the
+   allowlist.
+7. **Host CLI** (`./iclaude`): setup, login, allow, start, stop, restart, status, logs,
+   doctor, update, shell.
+
+### Security decision: local allowlist
+
+The upstream wizard writes `INKBOX_ALLOW_ALL_USERS=true` and relies on Inkbox
+server-side contact rules. The bridge also treats an empty `INKBOX_ALLOWED_USERS` as
+"everyone". Because Claude here has a shell and the owner's connectors, iClaude
+requires an explicit local allowlist on top of the contact rules and refuses to start
+without one.
+
+### Known limits to resolve in later phases
+
+- **Contact isolation.** Sessions and Inkbox contact memories are per contact, but
+  all contacts share `/workspace`, `~/.claude/CLAUDE.md` and Claude Code's project
+  memory. The default (and recommendation) is a single owner contact. Proper
+  multi-contact isolation needs per-contact workspaces, which the bridge does not
+  support today.
+- **Connectors.** Claude.ai remote connectors (GitHub, Fastmail, Vercel, Cloudflare)
+  should load in a session logged in with the subscription account, but this
+  has not yet been verified inside a bridged session.
+
+## Phases
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1. Research | Inspect bridge, decide architecture (this document) | Done |
+| 2. Docker MVP | Image, Compose, volumes, login, preflight, host CLI | Done; live auth untested |
+| 3. Easy install | `install.sh` for fresh VPS, default conversational CLAUDE.md, memory defaults | Next |
+| 4. Test & release | Live E2E checklist, connector verification, CI, v0.1.0 | Planned |
+
+## Pinned versions
+
+| Component | Pin | Where |
+|---|---|---|
+| Inkbox bridge | `a02722d` | `Dockerfile` `BRIDGE_REF` |
+| inkbox SDK | 0.7.20 | `docker/constraints.txt` |
+| claude-agent-sdk (and bundled Claude Code) | 0.2.170 (Claude Code 2.1.306) | `docker/constraints.txt` |
+| GitHub CLI | 2.101.0 | `Dockerfile` `GH_VERSION` |
+| Base | `node:22-bookworm-slim` | `Dockerfile` `BASE_IMAGE` |

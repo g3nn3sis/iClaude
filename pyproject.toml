@@ -1,0 +1,9 @@
+[project]
+name = "iclaude"
+version = "0.1.0.dev0"
+description = "Always-online Claude Code over iMessage, deployed with Docker on top of the Inkbox bridge"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["runtime"]

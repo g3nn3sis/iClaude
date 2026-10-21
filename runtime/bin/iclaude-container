@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+case "${1:-run}" in
+  shell) shift; exec bash "$@" ;;
+  claude|gh|git|inkbox-claude) exec "$@" ;;
+esac
+exec /opt/inkbox-claude/bin/python -m iclaude_runtime.cli "$@"
