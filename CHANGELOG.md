@@ -17,5 +17,9 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
   actions
 - Claude auto memory, turned off automatically when several contacts share the workspace
 - `iclaude connectors` reports which claude.ai connectors a bridged session can reach
+- `iclaude update` with automatic rollback, `iclaude auto-update on|off|status` (daily cron),
+  and `iclaude uninstall [--purge]`
+- `iclaude reset`: factory reset that forgets conversations, memory and workspace files but
+  keeps the Claude login, Inkbox config and authorised contacts
 - CI: unit and contract tests, ShellCheck, production image build, container and installer
   smoke tests

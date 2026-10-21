@@ -25,7 +25,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
       - name: ShellCheck
-        run: shellcheck iclaude install.sh runtime/bin/iclaude-container
+        run: shellcheck iclaude install.sh uninstall.sh scripts/update.sh runtime/bin/iclaude-container
       - name: Compose config
         run: docker compose config --quiet
 
@@ -68,10 +68,31 @@ jobs:
           docker compose down
           docker compose up -d --no-build
           docker compose exec -T iclaude iclaude-container check authorised
+      - name: Factory reset keeps logins and config
+        run: |
+          docker compose exec -T iclaude sh -c 'mkdir -p ~/.claude/projects/-workspace /workspace/repo && echo {} > ~/.claude/.credentials.json && echo {} > ~/.inkbox-claude/sessions.json && echo x > /workspace/repo/f'
+          ./iclaude reset --yes
+          docker compose exec -T iclaude iclaude-container check authorised
+          docker compose exec -T iclaude sh -c 'test -f ~/.claude/.credentials.json && test ! -e ~/.claude/projects && test ! -e ~/.inkbox-claude/sessions.json && test -z "$(ls -A /workspace)"'
           docker compose down -v
       - name: Installer (non-interactive)
         run: |
           git checkout -b ci-install
           ICLAUDE_REPO="$PWD" ICLAUDE_REF=ci-install ICLAUDE_DIR="$RUNNER_TEMP/iclaude" bash install.sh --no-setup
           "$RUNNER_TEMP/iclaude/iclaude" status
-          docker compose -f "$RUNNER_TEMP/iclaude/compose.yaml" down -v
+      - name: Update, auto-update and uninstall
+        run: |
+          ic="$RUNNER_TEMP/iclaude/iclaude"
+          "$ic" update --auto | tee update.log
+          grep -q "up to date" update.log
+          if command -v crontab >/dev/null; then
+            "$ic" auto-update on
+            crontab -l | grep -q iclaude-auto-update
+            "$ic" auto-update off
+            if crontab -l 2>/dev/null | grep -q iclaude-auto-update; then exit 1; fi
+          fi
+          "$ic" uninstall --yes
+          test ! -e "$RUNNER_TEMP/iclaude"
+          test ! -e "$HOME/.local/bin/iclaude"
+          docker volume inspect iclaude_home iclaude_workspace > /dev/null
+          docker volume rm iclaude_home iclaude_workspace
