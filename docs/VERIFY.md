@@ -40,6 +40,18 @@ Expect the Claude login prompt, then the Inkbox wizard, then all green checks an
 | Ask "what's my favourite colour?" | "Green" (the same session resumed) |
 | `iclaude update` and ask again | Still remembered |
 
+## 4b. OpenRouter (optional)
+
+| Step | Expect |
+|---|---|
+| `iclaude model openrouter` with a real key | `✓` for the key and both models, then `Models: OpenRouter` |
+| `iclaude logs \| grep "Models:"` | `Models: OpenRouter (~anthropic/claude-sonnet-latest, fast: …)` |
+| Text "what model are you?" | A reply; the request shows on your OpenRouter activity page |
+| "create hello.txt with hi in it" | An approval text as usual, and the file after `1` |
+| `iclaude connectors` | Note which connectors are still listed |
+| `iclaude model openrouter --model openai/gpt-5 --fast openai/gpt-5-mini`, repeat both texts | Replies and tool use work, or note what breaks |
+| `iclaude model claude`, text again | Back on the subscription; no new OpenRouter activity |
+
 ## 5. Security
 
 | Step | Expect |

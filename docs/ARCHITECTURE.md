@@ -120,6 +120,15 @@ without one.
   sessions' system prompt so Claude stops asking for confirmation in those categories,
   which overrides the confirmation list in an existing `CLAUDE.md`. Connector tool names
   have not been checked against a real account.
+- **OpenRouter.** `iclaude model openrouter` stores `ICLAUDE_PROVIDER=openrouter`,
+  `OPENROUTER_API_KEY` and the two model ids in the bridge `.env`. At bridge start (and in
+  every `iclaude-container` command except `login` and `model`), `provider.apply` sets
+  `ANTHROPIC_BASE_URL=https://openrouter.ai/api`, `ANTHROPIC_AUTH_TOKEN`, an empty
+  `ANTHROPIC_API_KEY` and the `ANTHROPIC_*_MODEL` / `CLAUDE_CODE_SUBAGENT_MODEL` aliases in
+  the process environment, so every Claude Code subprocess inherits them. Claude Code ranks
+  `ANTHROPIC_AUTH_TOKEN` above the subscription login, which stays on disk untouched.
+  Preflight checks for the key instead of the claude.ai login, and the subscription usage
+  warning is skipped.
 - **Reply rhythm.** The bridge sends a turn's whole reply as one message, though its prompt
   tells Claude each paragraph becomes its own bubble. In the default `natural` style
   (`ICLAUDE_REPLY_STYLE`), `hooks.stream_updates` wraps a bridge client's

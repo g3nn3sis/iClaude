@@ -10,7 +10,7 @@ from datetime import datetime, time as dtime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Mapping
 
-from . import alerts, caldav, reminders, usage, watchers
+from . import alerts, caldav, provider, reminders, usage, watchers
 from .checks import is_true
 from .notify import Notifier, owner, stable_key
 
@@ -179,7 +179,7 @@ class Agent:
 
     def usage_warning(self, now: datetime, phone: str) -> str:
         threshold = usage_threshold(self.env)
-        if threshold is None or not self.due("usage", USAGE_EVERY, now):
+        if threshold is None or provider.using_openrouter(self.env) or not self.due("usage", USAGE_EVERY, now):
             return ""
         from inkbox_claude.claude_usage import fetch_usage
 
