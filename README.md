@@ -4,7 +4,7 @@ An always-online Claude Code assistant on your own Linux VPS that you talk to ov
 iClaude packages the official [Inkbox Claude Code bridge](https://github.com/inkbox-ai/claude-code-plugin)
 into a hardened Docker deployment. It uses your Claude Pro/Max subscription, not an API key.
 
-> Status: **v0.1 MVP in progress.** Everything below runs locally. The Claude login and Inkbox
+> Status: **v0.1 in progress.** Everything below runs locally. The Claude login and Inkbox
 > steps need your real accounts, so they have not yet been tested end to end. See
 > [What has been tested](#what-has-been-tested).
 
@@ -16,13 +16,28 @@ into a hardened Docker deployment. It uses your Claude Pro/Max subscription, not
 
 ## Install
 
+On the VPS, as a user in the `docker` group:
+
 ```bash
-git clone https://github.com/g3nn3sis/iClaude.git
-cd iClaude
-./iclaude start     # builds the image and starts the container; it waits for setup
-./iclaude login     # sign in to Claude: open the URL, approve, paste the code back
-./iclaude setup     # Inkbox wizard: identity, iMessage, signing key, then who may text you
-./iclaude status    # all checks green? text your agent
+curl -fsSL https://raw.githubusercontent.com/g3nn3sis/iClaude/master/install.sh | bash
+```
+
+The installer checks Docker, clones iClaude to `~/iclaude`, links the `iclaude` command into
+`~/.local/bin`, builds and starts the container, then walks you through:
+
+1. **Claude login.** Open the URL it prints, approve with your Pro/Max account, and paste the code back.
+2. **Inkbox setup.** The official Inkbox wizard creates the agent, connects iMessage (scan the QR
+   code on your iPhone) and mints the webhook signing key.
+3. **Authorised contacts.** Enter your iMessage phone number (`+15551234567`) and/or Apple ID email.
+
+Re-running the installer is safe: it updates and skips finished steps. Options: `--dir <path>`,
+`--ref <branch-or-tag>`, `--no-setup`.
+
+Manual alternative:
+
+```bash
+git clone https://github.com/g3nn3sis/iClaude.git && cd iClaude
+./iclaude start && ./iclaude login && ./iclaude setup && ./iclaude status
 ```
 
 The container stays in a "waiting for setup" state until every check passes, then starts the
@@ -37,8 +52,10 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude allow [+15551234567 \| me@icloud.com]` | Show or add authorised contacts (`--remove`, `--replace`) |
 | `./iclaude start` / `stop` / `restart` | Control the container |
 | `./iclaude status` | Container health plus preflight checks |
+| `./iclaude check [claude\|inkbox\|…]` | Preflight checks only, exit code 0 when they pass |
 | `./iclaude logs [-f]` | Bridge logs |
 | `./iclaude doctor` | iClaude checks, bridge readiness and the upstream `inkbox-claude doctor` |
+| `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
 | `./iclaude update` | `git pull`, rebuild, restart (state is kept) |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
 
@@ -54,6 +71,20 @@ bridge on its own. Docker restarts it after crashes and reboots.
   the bridge's `.env` is mode 600.
 - **Container hardening.** Non-root user, read-only root filesystem, no capabilities,
   `no-new-privileges`, and no published ports (Inkbox reaches the bridge through an outbound tunnel).
+
+## Conversations and memory
+
+- **One conversation per contact.** The bridge keys each Claude session by Inkbox contact and
+  resumes it after restarts. Text `/clear` to start fresh or `/resume` to pick an older one.
+- **Default personality.** On first start iClaude installs `~/.claude/CLAUDE.md` in the home
+  volume: a brief, conversational assistant that confirms before acting for you (emails to
+  others, public posts, deploys, deletes, payments). Edit it with `./iclaude shell`. It is
+  never overwritten, so delete it and restart to get the latest default back. A repo's own
+  `CLAUDE.md` in the workspace is loaded as well.
+- **Memory.** Claude Code's built-in auto memory and Inkbox's per-contact memories are both on.
+  Auto memory is per workspace, so it is turned off automatically when more than one contact
+  is authorised. That keeps contacts from seeing each other's facts. Set
+  `ICLAUDE_SHARED_MEMORY=true` in `.env` next to `compose.yaml` only if every contact may share it.
 
 ## Where state lives
 
@@ -86,15 +117,15 @@ Tested locally in Docker:
 - Setup wizard launches inside the container with the Docker-specific steps patched in
 - `claude auth login` prints the subscription sign-in URL headlessly
 - Bridge launches under the container user (it stopped at the Inkbox API call, which this test environment cannot reach)
-- 45 unit and contract tests (`python -m pytest`)
+- `install.sh` on a clean home directory, both piped (`curl | bash` style, no terminal) and
+  interactive (reaches the Claude sign-in prompt)
+- Default `CLAUDE.md` seeded on first start and left alone afterwards
+- `iclaude connectors` runs a session and reads MCP status (logged-out path only)
+- Unit and contract tests (`python -m pytest`), plus the same checks in GitHub Actions CI, which
+  also builds the production image from Debian packages
 
-Needs your accounts (manual verification):
-
-1. `./iclaude login` completes and `./iclaude status` shows `Claude login: logged in (max, …)`.
-2. `./iclaude setup` completes, then iMessage the agent and get a reply.
-3. Ask it to run a command, receive the approval text, and reply `1`.
-4. `./iclaude restart`, text again, and check it remembers the conversation.
-5. Text from a number not on the allowlist and get no reply.
+Needs your accounts: the [live verification checklist](docs/VERIFY.md) covers subscription login,
+iMessage replies, approval texts, session persistence, the allowlist, confirmation rules and connectors.
 
 ## Development
 

@@ -12,12 +12,13 @@ docker info >/dev/null 2>&1 || die "Cannot reach the Docker daemon. Is it runnin
 
 compose() { docker compose "$@"; }
 running() { [ -n "$(compose ps --status running -q iclaude 2>/dev/null)" ]; }
-tty_flag() { [ -t 0 ] && [ -t 1 ] || echo "-T"; }
 in_container() {
+  local flags=()
+  [ -t 0 ] && [ -t 1 ] || flags=(-T)
   if running; then
-    compose exec $(tty_flag) iclaude iclaude-container "$@"
+    compose exec "${flags[@]}" iclaude iclaude-container "$@"
   else
-    compose run --rm $(tty_flag) iclaude "$@"
+    compose run --rm "${flags[@]}" iclaude "$@"
   fi
 }
 
@@ -32,8 +33,10 @@ Usage: ./iclaude <command>
   stop             Stop iClaude
   restart          Restart iClaude
   status           Container state, health and preflight checks
+  check [names]    Preflight checks only (exit code 0 when they pass)
   logs [-f]        Show bridge logs
   doctor           Full diagnostics (iClaude + Inkbox bridge doctor)
+  connectors       Which Claude connectors (GitHub, Fastmail, Vercel, Cloudflare...) the bridge can use
   update           Pull the latest iClaude, rebuild and restart
   shell            Open a shell inside the container
 EOF
@@ -63,8 +66,10 @@ case "$cmd" in
     compose ps
     in_container check || true
     ;;
+  check) in_container check "$@" ;;
   logs) compose logs --tail=200 "$@" iclaude ;;
   doctor) in_container doctor ;;
+  connectors) in_container connectors ;;
   update)
     if [ -d .git ]; then git pull --ff-only; fi
     compose build --pull

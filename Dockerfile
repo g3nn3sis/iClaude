@@ -38,6 +38,7 @@ RUN python3 -m venv /opt/inkbox-claude \
     && /opt/inkbox-claude/bin/inkbox-claude --help > /dev/null
 
 COPY runtime/iclaude_runtime /opt/iclaude/iclaude_runtime
+COPY runtime/defaults /opt/iclaude/defaults
 COPY runtime/bin/iclaude-container /usr/local/bin/iclaude-container
 
 RUN groupmod --new-name iclaude node \

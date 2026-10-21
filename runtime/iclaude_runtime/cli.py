@@ -10,8 +10,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from .checks import Check, effective_env, env_file_path, parse_contacts, preflight
+from .defaults import memory_environment, seed_claude_md
 
 GREEN, RED, YELLOW, BOLD, RESET = ("\033[32m", "\033[31m", "\033[33m", "\033[1m", "\033[0m") if sys.stdout.isatty() else ("",) * 5
 WAIT_SECONDS = 30
@@ -25,8 +27,15 @@ def _print_checks(checks: list[Check]) -> None:
             print(f"      {YELLOW}{check.fix}{RESET}")
 
 
+def select_checks(checks: list[Check], names: list[str]) -> list[Check]:
+    wanted = [n.lower() for n in names]
+    return [c for c in checks if not wanted or any(c.name.lower().startswith(n) for n in wanted)]
+
+
 def cmd_run() -> int:
     """Wait until preflight passes, then hand the process over to the bridge."""
+    if seed_claude_md(Path.home()):
+        print("Installed the default conversational ~/.claude/CLAUDE.md", flush=True)
     last = None
     while True:
         checks = preflight()
@@ -42,7 +51,7 @@ def cmd_run() -> int:
         time.sleep(WAIT_SECONDS)
     print("iClaude preflight passed:", flush=True)
     _print_checks(checks)
-    sys.stdout.flush()
+    print(f"  Memory: {memory_environment(effective_env())}", flush=True)
     os.execvp("inkbox-claude", ["inkbox-claude", "run"])
 
 
@@ -173,8 +182,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("setup", help="interactive Inkbox setup and contact allowlist")
     sub.add_parser("login", help="log in to Claude with a Pro/Max subscription")
     sub.add_parser("doctor", help="diagnose configuration and bridge health")
-    sub.add_parser("check", help="run preflight checks only")
+    check = sub.add_parser("check", help="run preflight checks only")
+    check.add_argument("names", nargs="*", help="only these checks, e.g. claude, inkbox, webhook, authorised")
     sub.add_parser("healthcheck", help="Docker health probe")
+    sub.add_parser("connectors", help="list the MCP connectors a bridged Claude session can reach")
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
     allow.add_argument("contacts", nargs="*")
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
@@ -190,11 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         return cmd_doctor()
     if args.command == "check":
-        checks = preflight()
+        checks = select_checks(preflight(), args.names)
         _print_checks(checks)
         return 0 if all(c.ok for c in checks) else 1
     if args.command == "healthcheck":
         return cmd_healthcheck()
+    if args.command == "connectors":
+        from .connectors import report
+
+        return report()
     if args.command == "allow":
         if not args.contacts:
             current = effective_env().get("INKBOX_ALLOWED_USERS", "")

@@ -12,6 +12,8 @@ def test_run_waits_for_preflight_then_execs_bridge(monkeypatch):
     sleeps, execs = [], []
     monkeypatch.setattr(cli, "preflight", lambda: next(results))
     monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+    monkeypatch.setattr(cli, "seed_claude_md", lambda home: False)
+    monkeypatch.setattr(cli, "memory_environment", lambda env: "on")
     monkeypatch.setattr(cli.os, "execvp", lambda file, args: execs.append(args))
     cli.cmd_run()
     assert sleeps == [cli.WAIT_SECONDS, cli.WAIT_SECONDS]
@@ -22,6 +24,8 @@ def test_run_logs_unchanged_failures_once(monkeypatch, capsys):
     results = iter([FAIL, FAIL, FAIL, PASS])
     monkeypatch.setattr(cli, "preflight", lambda: next(results))
     monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    monkeypatch.setattr(cli, "seed_claude_md", lambda home: False)
+    monkeypatch.setattr(cli, "memory_environment", lambda env: "on")
     monkeypatch.setattr(cli.os, "execvp", lambda file, args: None)
     cli.cmd_run()
     assert capsys.readouterr().out.count("waiting for setup") == 1
@@ -63,3 +67,10 @@ def test_healthcheck(monkeypatch):
     assert cli.cmd_healthcheck() == 1
     monkeypatch.setattr(cli, "_probe", lambda path: None)
     assert cli.cmd_healthcheck() == 1
+
+
+def test_select_checks_by_prefix():
+    checks = [Check("Claude login", True, ""), Check("Inkbox identity", False, ""), Check("Workspace", True, "")]
+    assert [c.name for c in cli.select_checks(checks, ["claude"])] == ["Claude login"]
+    assert [c.name for c in cli.select_checks(checks, ["INKBOX", "work"])] == ["Inkbox identity", "Workspace"]
+    assert cli.select_checks(checks, []) == checks

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest
+      - name: Unit tests
+        run: python -m pytest -q
+      - name: ShellCheck
+        run: shellcheck iclaude install.sh runtime/bin/iclaude-container
+      - name: Compose config
+        run: docker compose config --quiet
+
+  image:
+    runs-on: ubuntu-latest
+    needs: lint-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t iclaude:local .
+      - name: Unit and bridge contract tests inside the image
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src --entrypoint sh iclaude:local -c \
+            '/opt/inkbox-claude/bin/pip install -q --target /tmp/pt pytest && PYTHONPATH=/tmp/pt /opt/inkbox-claude/bin/python -m pytest -q -p no:cacheprovider'
+      - name: Image contents
+        run: |
+          docker run --rm --entrypoint sh iclaude:local -c '
+            set -e
+            test "$(id -u)" = 1000
+            claude --version
+            gh --version
+            git --version
+            inkbox-claude --help > /dev/null
+            test -f /opt/iclaude/defaults/CLAUDE.md'
+      - name: Container waits for setup instead of starting the bridge
+        run: |
+          docker compose up -d --no-build
+          for _ in $(seq 1 30); do
+            docker compose logs iclaude | grep -q "waiting for setup" && break
+            sleep 2
+          done
+          docker compose logs iclaude
+          docker compose logs iclaude | grep -q "Claude login: not logged in"
+          docker compose exec -T iclaude test -f /home/iclaude/.claude/CLAUDE.md
+          if docker compose exec -T iclaude iclaude-container check; then echo "preflight must fail before setup"; exit 1; fi
+          if docker compose exec -T iclaude touch /etc/should-fail; then echo "root filesystem must be read-only"; exit 1; fi
+      - name: Allowlist persists across container recreation
+        run: |
+          docker compose exec -T iclaude iclaude-container allow +15551234567
+          docker compose down
+          docker compose up -d --no-build
+          docker compose exec -T iclaude iclaude-container check authorised
+          docker compose down -v
+      - name: Installer (non-interactive)
+        run: |
+          git checkout -b ci-install
+          ICLAUDE_REPO="$PWD" ICLAUDE_REF=ci-install ICLAUDE_DIR="$RUNNER_TEMP/iclaude" bash install.sh --no-setup
+          "$RUNNER_TEMP/iclaude/iclaude" status
+          docker compose -f "$RUNNER_TEMP/iclaude/compose.yaml" down -v
