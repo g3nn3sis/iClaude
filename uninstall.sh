@@ -38,7 +38,9 @@ ok()   { echo "  ${GREEN}✓${RESET} $*"; }
 warn() { echo "  ${YELLOW}!${RESET} $*"; }
 die()  { echo "${RED}✗ $*${RESET}" >&2; exit 1; }
 
-[ -f "$DIR/compose.yaml" ] && [ -f "$DIR/iclaude" ] || die "$DIR does not look like an iClaude checkout."
+if [ ! -f "$DIR/compose.yaml" ] || [ ! -f "$DIR/iclaude" ]; then
+  die "$DIR does not look like an iClaude checkout."
+fi
 
 ask() {
   local answer
