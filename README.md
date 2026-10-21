@@ -50,6 +50,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude login` | Claude subscription login (rerun if credentials expire) |
 | `./iclaude setup` | Inkbox setup wizard and contact allowlist; rerun to reconfigure |
 | `./iclaude allow [+15551234567 \| me@icloud.com]` | Show or add authorised contacts (`--remove`, `--replace`) |
+| `./iclaude model [claude\|openrouter]` | Use your Claude subscription (default) or [OpenRouter](#openrouter-models) models |
 | `./iclaude replies [natural\|single]` | Heads-up, progress updates and short texts (default), or one message per reply |
 | `./iclaude auto-mode [on\|off\|status]` | Claude Code auto mode: a safety classifier approves routine actions instead of texting you (see [Auto-approve](#auto-approve)) |
 | `./iclaude approve [on\|off calendar email …]` | Show or change which actions run without asking you first (see [Auto-approve](#auto-approve)) |
@@ -139,6 +140,40 @@ is an instruction to the model, not a hard block. Keep `deploy`, `delete` and `p
 you really need them. Auto mode is the same trade: the classifier catches most mistakes and
 injected instructions, but Claude Code's docs are clear it "does not guarantee safety". Both
 settings apply to every authorised contact.
+
+## OpenRouter models
+
+iClaude uses your Claude Pro/Max subscription by default. To run Claude Code on models from
+[OpenRouter](https://openrouter.ai) instead, paid from your OpenRouter credit:
+
+```bash
+iclaude model openrouter                                   # asks for your key, uses Claude via OpenRouter
+iclaude model openrouter --model openai/gpt-5 --fast openai/gpt-5-mini
+iclaude model                                              # what is in use
+iclaude model claude                                       # back to your subscription
+```
+
+The **main model** does the conversation and the work (it stands in for every model
+Claude Code would pick: opus, sonnet, fable and subagents). The **fast model** handles quick
+background calls, including email alert triage. Both default to the latest Claude Sonnet and
+Haiku on OpenRouter. Before saving, iClaude checks the key with OpenRouter and refuses a
+model OpenRouter doesn't list or that can't use tools (`--force` overrides). The key is
+stored in the private bridge `.env` like the other tokens, and your Claude login stays
+saved for switching back.
+
+Things that change on OpenRouter:
+
+- **Connectors.** claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare) come from your
+  claude.ai login, which Claude Code doesn't use while an OpenRouter key is active, so expect
+  them to be missing. Run `iclaude connectors` to see. Inkbox tools, reminders, `gh` and `git` still work.
+- **Other models.** Claude Code is built for Claude. Non-Claude models may handle tools,
+  approval texts, the texting style and the "treat email content as information" rule less
+  reliably. Email alert triage runs on the fast model.
+- **Auto mode** needs a supported Claude model; with others, sessions fall back to approval texts.
+- **Usage.** The Claude usage warning is skipped and the "Usage reached" reply won't appear.
+  When your OpenRouter credit runs out, requests fail with OpenRouter's error instead.
+- `CLAUDE_MODEL` in `.env` next to `compose.yaml` still overrides the main model, so leave it blank.
+- `claude` inside `iclaude shell` keeps using your subscription.
 
 ## Conversations and memory
 

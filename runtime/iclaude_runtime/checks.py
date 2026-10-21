@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 
-from . import approvals
+from . import approvals, provider
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 PHONE_RE = re.compile(r"^\+[1-9]\d{6,14}$")
@@ -164,11 +164,20 @@ def check_workspace(project_dir: Path) -> Check:
     return Check("Workspace", True, str(project_dir))
 
 
+def check_model_provider(env: Mapping[str, str]) -> Check:
+    """With OpenRouter on, the claude.ai login is not what answers, so check the key instead."""
+    if not env.get(provider.KEY):
+        return Check("Claude login", False, "OpenRouter is selected but no key is saved",
+                     "Run: ./iclaude model openrouter (or ./iclaude model claude to use your subscription)")
+    main, fast = provider.models(env)
+    return Check("Claude login", True, f"using OpenRouter instead ({main}, fast: {fast})")
+
+
 def preflight(env: Mapping[str, str] | None = None) -> list[Check]:
     env = effective_env() if env is None else env
     project_dir = Path(env.get("CLAUDE_PROJECT_DIR") or "/workspace")
     return [
-        check_claude_auth(),
+        check_model_provider(env) if provider.using_openrouter(env) else check_claude_auth(),
         check_inkbox_identity(env),
         check_signature(env),
         check_allowlist(env),

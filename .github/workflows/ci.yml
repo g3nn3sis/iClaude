@@ -88,6 +88,11 @@ jobs:
           docker compose exec -T iclaude iclaude-container replies | grep -q "Replies: natural"
           docker compose exec -T iclaude iclaude-container replies single | grep -q "Replies: single"
           docker compose exec -T iclaude iclaude-container replies natural
+          docker compose exec -T iclaude iclaude-container model | grep -q "Claude subscription"
+          docker compose exec -T iclaude sh -c 'printf "\nICLAUDE_PROVIDER=openrouter\n" >> ~/.inkbox-claude/.env'
+          { docker compose exec -T iclaude iclaude-container check claude || true; } | grep -q "no key is saved"
+          docker compose exec -T iclaude iclaude-container model claude
+          { docker compose exec -T iclaude iclaude-container check claude || true; } | grep -q "not logged in"
       - name: Backup contains the config and restores it
         run: |
           ./iclaude backup "$RUNNER_TEMP/b.tgz" --with-workspace

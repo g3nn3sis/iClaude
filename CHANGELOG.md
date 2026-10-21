@@ -30,6 +30,8 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
   commands and file edits always ask
 - Claude Code auto mode (`iclaude auto-mode on|off`): sets `permissions.defaultMode` to `auto`
   in the user settings, so a safety classifier approves routine actions instead of texts
+- OpenRouter models (`iclaude model openrouter|claude`): run Claude Code through OpenRouter
+  with a main and a fast model, key and models checked before saving
 - Natural replies (`iclaude replies natural|single`, natural by default): over iMessage and
   SMS a heads-up when work starts, throttled progress updates, and the result split into one
   text per paragraph

@@ -106,3 +106,9 @@ def test_tick_isolates_failures_and_skips_owner_jobs_without_a_phone(tmp_path):
     a.tick(NOW, lambda prompt: "{}")
     assert "Reminders" in a.logged and "Email alerts" not in a.logged
     assert (tmp_path / "state.json").exists()
+
+
+def test_no_usage_warning_on_openrouter(tmp_path):
+    a = agent(tmp_path, {"ICLAUDE_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "k"})
+    assert a.usage_warning(NOW, "+15551234567") == ""
+    assert a.notifier.messages == []

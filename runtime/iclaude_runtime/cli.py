@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import subprocess
@@ -13,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .checks import Check, effective_env, env_file_path, parse_contacts, preflight
-from . import approvals, chat_flow, manage
+from . import approvals, chat_flow, manage, provider
 from .defaults import memory_environment, seed_claude_md
 
 GREEN, RED, YELLOW, BOLD, RESET = ("\033[32m", "\033[31m", "\033[33m", "\033[1m", "\033[0m") if sys.stdout.isatty() else ("",) * 5
@@ -140,6 +141,57 @@ def cmd_replies(choice: str | None) -> int:
     else:
         print("Replies: single. Claude sends one message when it is done.")
         print("Switch to heads-up, updates and short texts with: ./iclaude replies natural")
+    return 0
+
+
+def cmd_model(action: str, model: str | None, fast: str | None, new_key: bool, force: bool) -> int:
+    env = effective_env()
+    if action == "claude":
+        _save(provider.SETTING, "claude")
+        print("Models: your Claude subscription (the claude.ai login from ./iclaude login).")
+        if env.get(provider.KEY):
+            print("Your OpenRouter key stays saved for switching back: ./iclaude model openrouter")
+        return 0
+    if action == "openrouter":
+        key = env.get(provider.KEY, "")
+        if new_key or not key:
+            print("Create a key at https://openrouter.ai/settings/keys. Usage is billed to your OpenRouter credit.")
+            key = getpass.getpass("OpenRouter API key (input hidden, empty to cancel): ").strip()
+            if not key:
+                print(f"{RED}Nothing was saved.{RESET}")
+                return 1
+        ok, detail = provider.check_key(key)
+        if not ok:
+            print(f"{RED}{detail}. Nothing was saved.{RESET}")
+            return 1
+        main_model, fast_model = model or provider.models(env)[0], fast or provider.models(env)[1]
+        for label, name in (("Main model", main_model), ("Fast model", fast_model)):
+            good, info = provider.check_model(name)
+            print(f"  {GREEN + '✓' if good else RED + '✗'}{RESET} {label} {name}: {info}")
+            if not good and not force:
+                print(f"{RED}Nothing was saved. Pick another model, or add --force to use it anyway.{RESET}")
+                return 1
+        _save(provider.KEY, key)
+        _save(provider.MODEL, main_model)
+        _save(provider.FAST_MODEL, fast_model)
+        _save(provider.SETTING, "openrouter")
+        print(f"Models: OpenRouter ({detail}). Switch back with: ./iclaude model claude")
+        env = effective_env()
+    if provider.using_openrouter(env):
+        main_model, fast_model = provider.models(env)
+        if action == "status":
+            print(f"Models: OpenRouter, main {main_model}, fast {fast_model}.")
+        print(f"{YELLOW}On OpenRouter:{RESET}")
+        print("  - claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare) need the claude.ai login and will")
+        print("    most likely be missing; check with ./iclaude connectors. Inkbox tools, gh and git still work.")
+        print("  - Claude Code is built for Claude models. Others may misuse tools or ignore the texting style.")
+        print("  - Auto mode needs a supported Claude model, otherwise sessions use approval texts.")
+        print("  - The Claude usage warning and \"Usage reached\" reply do not apply; watch your OpenRouter credit.")
+        if env.get("CLAUDE_MODEL"):
+            print(f"  - CLAUDE_MODEL={env['CLAUDE_MODEL']} in .env overrides the main model; clear it to use {main_model}.")
+    else:
+        print("Models: your Claude subscription. Use OpenRouter instead with:")
+        print("  ./iclaude model openrouter [--model anthropic/claude-sonnet-4.6] [--fast anthropic/claude-haiku-4.5]")
     return 0
 
 
@@ -276,6 +328,12 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("categories", nargs="*", help=f"{', '.join(approvals.BY_NAME)} or all")
     auto_mode = sub.add_parser("auto-mode", help="Claude Code auto mode: a classifier approves routine actions")
     auto_mode.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
+    model = sub.add_parser("model", help="use your Claude subscription or OpenRouter models")
+    model.add_argument("action", nargs="?", default="status", choices=["status", "claude", "openrouter"])
+    model.add_argument("--model", help="OpenRouter model id for the main model, e.g. anthropic/claude-sonnet-4.6")
+    model.add_argument("--fast", help="OpenRouter model id for quick background calls (haiku class)")
+    model.add_argument("--new-key", action="store_true", help="ask for a new OpenRouter key")
+    model.add_argument("--force", action="store_true", help="save a model even if the checks fail")
     replies = sub.add_parser("replies", help="natural (heads-up, updates, short texts) or single message replies")
     replies.add_argument("style", nargs="?", choices=list(chat_flow.STYLES))
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
@@ -283,7 +341,8 @@ def main(argv: list[str] | None = None) -> int:
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
     allow.add_argument("--remove", action="store_true", help="remove the given contacts")
     args = parser.parse_args(argv)
-
+    if args.command not in ("login", "model"):
+        provider.apply(effective_env())
     if args.command == "run":
         return cmd_run()
     if args.command == "setup":
@@ -307,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         from .connectors import report
 
         return report()
+    if args.command == "model":
+        return cmd_model(args.action, args.model, args.fast, args.new_key, args.force)
     if args.command == "replies":
         return cmd_replies(args.style)
     if args.command == "auto-mode":
