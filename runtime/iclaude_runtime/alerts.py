@@ -23,7 +23,8 @@ log = logging.getLogger("iclaude.alerts")
 STATE_FILE = Path.home() / ".iclaude" / "alerts.json"
 JMAP_SESSION_URL = "https://api.fastmail.com/jmap/session"
 JMAP_USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]
-DEFAULT_INTERVAL_MINUTES = 10
+DEFAULT_INTERVAL_SECONDS = 30
+MIN_INTERVAL_SECONDS = 15
 DEFAULT_MODEL = "haiku"
 MAX_EMAILS = 20
 MAX_FAILURES = 3
@@ -89,9 +90,9 @@ def settings(env: Mapping[str, str]) -> Settings:
     elif not PHONE_RE.match(recipient):
         problem = f"Alert recipient {recipient} is not a +E.164 phone number."
     try:
-        interval = max(2, int(env.get("ICLAUDE_ALERT_INTERVAL") or DEFAULT_INTERVAL_MINUTES))
+        interval = max(MIN_INTERVAL_SECONDS, int(env.get("ICLAUDE_ALERT_INTERVAL") or DEFAULT_INTERVAL_SECONDS))
     except ValueError:
-        interval = DEFAULT_INTERVAL_MINUTES
+        interval = DEFAULT_INTERVAL_SECONDS
     return Settings(
         enabled=is_true(env.get("ICLAUDE_ALERTS")),
         recipient=recipient,
@@ -133,15 +134,27 @@ class InkboxSource:
     def __init__(self, env: Mapping[str, str]):
         self.env = env
         self.address = ""
+        self.identity = None
+
+    def _identity(self):
+        if self.identity is None:
+            from inkbox import Inkbox
+            from inkbox_claude.config import inkbox_client_kwargs
+
+            client = Inkbox(**inkbox_client_kwargs(self.env.get("INKBOX_API_KEY", ""), self.env.get("INKBOX_BASE_URL")))
+            self.identity = client.get_identity(self.env.get("INKBOX_IDENTITY", ""))
+            mailbox = getattr(self.identity, "mailbox", None)
+            self.address = str(getattr(mailbox, "email_address", "") or "").lower()
+        return self.identity
 
     def fetch(self, since: datetime) -> list[Email]:
-        from inkbox import Inkbox
-        from inkbox_claude.config import inkbox_client_kwargs
+        try:
+            return self._fetch(self._identity(), since)
+        except Exception:
+            self.identity = None
+            raise
 
-        client = Inkbox(**inkbox_client_kwargs(self.env.get("INKBOX_API_KEY", ""), self.env.get("INKBOX_BASE_URL")))
-        identity = client.get_identity(self.env.get("INKBOX_IDENTITY", ""))
-        mailbox = getattr(identity, "mailbox", None)
-        self.address = str(getattr(mailbox, "email_address", "") or "").lower()
+    def _fetch(self, identity, since: datetime) -> list[Email]:
         found = []
         for message in identity.iter_emails(direction="inbound", start_datetime=since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")):
             if message.created_at <= since:
@@ -167,6 +180,7 @@ class FastmailSource:
     def __init__(self, token: str, opener: Callable = urllib.request.urlopen):
         self.token = token
         self.opener = opener
+        self.cached: tuple[str, str, str] | None = None
 
     def _request(self, url: str, payload: dict | None = None) -> dict:
         data = json.dumps(payload).encode() if payload is not None else None
@@ -181,12 +195,23 @@ class FastmailSource:
         session = self._request(JMAP_SESSION_URL)
         return session["apiUrl"], session["primaryAccounts"]["urn:ietf:params:jmap:mail"]
 
+    def _inbox(self) -> tuple[str, str, str]:
+        if self.cached is None:
+            api, account = self.session()
+            boxes = self._request(api, {"using": JMAP_USING, "methodCalls": [
+                ["Mailbox/query", {"accountId": account, "filter": {"role": "inbox"}}, "m"],
+            ]})
+            self.cached = api, account, boxes["methodResponses"][0][1]["ids"][0]
+        return self.cached
+
     def fetch(self, since: datetime) -> list[Email]:
-        api, account = self.session()
-        boxes = self._request(api, {"using": JMAP_USING, "methodCalls": [
-            ["Mailbox/query", {"accountId": account, "filter": {"role": "inbox"}}, "m"],
-        ]})
-        inbox = boxes["methodResponses"][0][1]["ids"][0]
+        try:
+            return self._fetch(*self._inbox(), since)
+        except Exception:
+            self.cached = None
+            raise
+
+    def _fetch(self, api: str, account: str, inbox: str, since: datetime) -> list[Email]:
         after = since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         result = self._request(api, {"using": JMAP_USING, "methodCalls": [
             ["Email/query", {
@@ -394,21 +419,27 @@ def imessage_sender(env: Mapping[str, str], recipient: str) -> Callable[[str, st
 
 
 def watch(env_loader: Callable[[], Mapping[str, str]], stop: threading.Event, first_delay: float = 30) -> None:
+    """Poll mail without Claude; only a check that finds new mail spends a Claude turn."""
     stop.wait(first_delay)
+    sources, signature, last_log = [], None, None
     while not stop.is_set():
         env = env_loader()
         conf = settings(env)
         if conf.enabled and not conf.problem:
+            if signature != (env.get("INKBOX_IDENTITY"), conf.fastmail_token):
+                sources, signature = make_sources(env, conf), (env.get("INKBOX_IDENTITY"), conf.fastmail_token)
             state = load_state()
             try:
-                summary, _ = run_cycle(env, state, make_sources(env, conf),
+                summary, _ = run_cycle(env, state, sources,
                                        lambda prompt: asyncio.run(ask_claude(prompt, conf.model)),
                                        imessage_sender(env, conf.recipient))
-                log.info("Email alerts: %s", summary)
             except Exception as exc:
-                log.warning("Email alert check failed: %s", type(exc).__name__)
+                summary = f"check failed: {type(exc).__name__}"
+            if summary != last_log:
+                log.info("Email alerts: %s", summary)
+            last_log = summary
             save_state(state)
-        stop.wait(conf.interval * 60)
+        stop.wait(conf.interval)
 
 
 def start_background(env_loader: Callable[[], Mapping[str, str]]) -> threading.Thread:

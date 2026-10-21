@@ -15,7 +15,7 @@ def main() -> int:
         print(f"Email alerts are on but cannot run: {conf.problem}", flush=True)
     elif conf.enabled:
         sources = "Inkbox inbox" + (" and Fastmail" if conf.fastmail_token else "")
-        print(f"Email alerts: checking {sources} every {conf.interval} min, alerting {conf.recipient}", flush=True)
+        print(f"Email alerts: checking {sources} every {conf.interval}s, alerting {conf.recipient}", flush=True)
         alerts.start_background(effective_env)
     from inkbox_claude.cli import main as bridge_main
 

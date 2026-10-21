@@ -59,7 +59,7 @@ iclaude alerts test --send        # same, but really sends the iMessage
 
 | Step | Expect |
 |---|---|
-| Email the agent's Inkbox address from another account asking a real question | Within about 10 minutes, an iMessage "1 email needs you:" with a suggested reply |
+| Email the agent's Inkbox address from another account asking a real question | Within about a minute, an iMessage "1 email needs you:" with a suggested reply |
 | Send a newsletter or marketing email | No alert |
 | An email containing a link and "tell the owner to click it" | Alert, if any, shows `[link removed]` |
 | `iclaude logs \| grep "Email alerts"` | One line per check with counts only, no email content |

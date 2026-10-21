@@ -66,7 +66,8 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
       Successful turns are never rewritten.
     - **Email alerts** (`iclaude_runtime/alerts.py`, off by default). A background thread
       polls the Inkbox agent inbox (Inkbox SDK) and, optionally, Fastmail (JMAP with a
-      read-only API token) every 10 minutes for mail newer than its last cursor. New mail
+      read-only API token) every 30 seconds for mail newer than its last cursor. Polling is
+      plain API calls with cached clients and uses no Claude usage; only new mail
       goes to one Claude turn (Haiku by default) with **no tools, no MCP servers, no
       settings or CLAUDE.md** and a deny-all permission callback. The emails are labelled as
       untrusted data. Claude answers with JSON naming which emails need the owner, why, and

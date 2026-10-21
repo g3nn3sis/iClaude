@@ -92,7 +92,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 
 ## Email alerts
 
-Off by default. With alerts on, iClaude checks the agent's Inkbox inbox every 10 minutes,
+Off by default. With alerts on, iClaude checks the agent's Inkbox inbox every 30 seconds,
 plus your Fastmail inbox if you connect it. When something new needs you, you get one
 iMessage like:
 
@@ -121,8 +121,9 @@ a malicious email cannot make it run commands or send anything. iClaude sends th
 only to an authorised phone number. Links are stripped from alerts. Mail from your own
 authorised addresses is skipped, because the bridge already answers those as conversations.
 Fetching an Inkbox email marks it read in the agent's inbox. Fastmail is read only, so
-nothing changes there. Each check with new mail costs one small Claude (Haiku) turn against
-your subscription. Change the interval with `ICLAUDE_ALERT_INTERVAL` (minutes) and the
+nothing changes there. The checks themselves are plain API calls and use none of your Claude
+usage. Only a check that finds new mail runs one small Claude (Haiku) turn to decide whether
+it needs you. Change the interval with `ICLAUDE_ALERT_INTERVAL` (seconds, minimum 15) and the
 model with `ICLAUDE_ALERT_MODEL` in the bridge `.env`.
 
 ## Usage limit

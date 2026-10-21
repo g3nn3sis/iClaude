@@ -29,7 +29,7 @@ def answer(*items):
 
 def test_settings_defaults_to_first_authorised_phone():
     conf = alerts.settings(ENV)
-    assert (conf.enabled, conf.recipient, conf.interval, conf.model, conf.problem) == (True, "+15551234567", 10, "haiku", "")
+    assert (conf.enabled, conf.recipient, conf.interval, conf.model, conf.problem) == (True, "+15551234567", 30, "haiku", "")
 
 
 @pytest.mark.parametrize("env, problem", [
@@ -168,3 +168,61 @@ def test_state_round_trip(tmp_path):
     assert alerts.load_state(path) == {"since": {"Inkbox": "x"}}
     assert (path.parent.stat().st_mode & 0o777) == 0o700
     assert alerts.load_state(tmp_path / "missing.json") == {}
+
+
+def test_interval_is_seconds_with_a_floor():
+    assert alerts.settings({**ENV, "ICLAUDE_ALERT_INTERVAL": "5"}).interval == alerts.MIN_INTERVAL_SECONDS
+    assert alerts.settings({**ENV, "ICLAUDE_ALERT_INTERVAL": "nope"}).interval == 30
+
+
+def test_quiet_polls_never_call_claude():
+    state = {"since": {"Inkbox": (NOW - timedelta(hours=1)).isoformat()}}
+    asked = []
+    for _ in range(5):
+        alerts.run_cycle(ENV, state, [Source("Inkbox", [])], lambda p: asked.append(p), None, now=NOW)
+    assert asked == []
+
+
+def test_watch_reuses_sources_and_stops(monkeypatch):
+    import threading
+
+    made, stop = [], threading.Event()
+
+    def fake_cycle(env, state, sources, ask, send):
+        made.append(id(sources))
+        if len(made) == 3:
+            stop.set()
+        return "Checked Inkbox: 0 new, 0 flagged.", None
+
+    monkeypatch.setattr(alerts, "run_cycle", fake_cycle)
+    monkeypatch.setattr(alerts, "load_state", lambda: {})
+    monkeypatch.setattr(alerts, "save_state", lambda state: None)
+    monkeypatch.setattr(alerts, "settings", lambda env: alerts.Settings(True, "+15551234567", 0, "haiku", "", ""))
+    alerts.watch(lambda: ENV, stop, first_delay=0)
+    assert len(made) == 3 and len(set(made)) == 1
+
+
+def test_fastmail_caches_session_and_resets_on_error():
+    calls = []
+
+    class Fake(alerts.FastmailSource):
+        def session(self):
+            calls.append("session")
+            return "api", "acc"
+
+        def _request(self, url, payload=None):
+            return {"methodResponses": [["Mailbox/query", {"ids": ["inbox"]}, "m"]]}
+
+        def _fetch(self, api, account, inbox, since):
+            if since is None:
+                raise OSError("down")
+            return []
+
+    source = Fake("tok")
+    source.fetch(NOW)
+    source.fetch(NOW)
+    assert calls == ["session"]
+    with pytest.raises(OSError):
+        source.fetch(None)
+    source.fetch(NOW)
+    assert calls == ["session", "session"]

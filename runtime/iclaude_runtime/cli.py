@@ -243,7 +243,7 @@ def cmd_alerts(action: str, to: str | None, lookback_hours: float, send: bool) -
     print(f"Email alerts: {'on' if conf.enabled else 'off'}")
     print(f"  Recipient: {conf.recipient or '(none)'}" + (f"  {RED}{conf.problem}{RESET}" if conf.problem else ""))
     print(f"  Sources: Inkbox inbox{', Fastmail' if conf.fastmail_token else ' (Fastmail not connected)'}")
-    print(f"  Every {conf.interval} min, model {conf.model}")
+    print(f"  Every {conf.interval}s (no Claude usage unless there is new mail), triage model {conf.model}")
     if state.get("last_run"):
         print(f"  Last check: {state['last_run']}")
     if not conf.enabled:
