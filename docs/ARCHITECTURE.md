@@ -48,7 +48,8 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
    is replaced by Docker's restart policy. After the wizard it asks for the
    allowlist.
 7. **Host CLI** (`./iclaude`): setup, login, allow, start, stop, restart, status, check,
-   logs, doctor, connectors, alerts, update, auto-update, reset, uninstall, shell.
+   logs, doctor, connectors, alerts, briefing, reminders, voice, backup, restore, update,
+   auto-update, reset, uninstall, shell.
 8. **Installer** (`install.sh`): checks Docker, clones or updates the repo, links the CLI,
    starts the container, then runs login and setup only when their checks fail.
 9. **Conversational defaults**: a user-level `~/.claude/CLAUDE.md` seeded once (never
@@ -64,20 +65,30 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
       `RateLimitEvent`, or the CLI's "hit your limit" result) is answered with
       "Usage reached. Claude is available again at 17:00 (BST)." instead of the raw CLI line.
       Successful turns are never rewritten.
-    - **Email alerts** (`iclaude_runtime/alerts.py`, off by default). A background thread
-      polls the Inkbox agent inbox (Inkbox SDK) and, optionally, Fastmail (JMAP with a
-      read-only API token) every 30 seconds for mail newer than its last cursor. Polling is
-      plain API calls with cached clients and uses no Claude usage; only new mail
-      goes to one Claude turn (Haiku by default) with **no tools, no MCP servers, no
-      settings or CLAUDE.md** and a deny-all permission callback. The emails are labelled as
-      untrusted data. Claude answers with JSON naming which emails need the owner, why, and
-      a suggested reply. iClaude itself, not Claude, sends one iMessage to the owner. The
-      owner must be an authorised phone number. Links in Claude's output are removed, so a
-      phishing email cannot turn the alert into a link from "iClaude". Cursors only advance
-      after triage and sending succeed. A usage limit pauses polling until the reset, and
-      after three failed attempts a batch is skipped so it cannot burn usage forever.
-      Senders on the allowlist and the agent's own address are skipped, because the bridge
-      already treats those emails as conversations.
+    - **Hooks** (`hooks.py`). They record which bridge conversation belongs to which phone
+      number. They mirror iClaude's notifications into that conversation through the bridge's
+      own `buffer_context`, so Claude sees them as context with the next message. They also
+      give every bridge session an in-process MCP server (`iclaude`) with `remind`,
+      `list_reminders` and `cancel_reminder`. Those tools act only for the contact of the
+      current session (the bridge's `CURRENT_SESSION`) and only for authorised phone numbers.
+    - **Scheduler** (`scheduler.py`): one daemon thread with a 15 s tick that runs every
+      unprompted feature. Each job is isolated, so one failing source never stops the rest.
+      Every outbound message goes through `notify.Notifier`, which refuses anything but an
+      authorised phone and uses idempotency keys, so a retry never double-sends.
+      - Reminders (`reminders.py`) are fixed text, with no Claude turn.
+      - Email alerts (`alerts.py`, opt-in) poll the Inkbox agent inbox (Inkbox SDK) and,
+        optionally, Fastmail (JMAP, read-only token) every 30 s, with cached clients. New mail
+        goes to one Claude turn (Haiku by default) with **no tools, no MCP servers, no
+        settings or CLAUDE.md** and a deny-all permission callback. The emails are labelled
+        as untrusted data. Links are removed from the result. Cursors advance only after
+        triage and sending succeed. A usage limit pauses polling. A batch is skipped after
+        three failed attempts.
+      - Calendar heads-ups and the morning briefing read CalDAV (`caldav.py`), with server-side
+        recurrence expansion.
+      - The usage warning reads the same `/api/oauth/usage` endpoint as Claude Code's `/usage`,
+        through the bridge's `claude_usage` module.
+      - GitHub (`gh api notifications`), Vercel and Cloudflare Pages (`watchers.py`) are
+        rule-based. None of these use Claude.
 
 ### Security decision: local allowlist
 

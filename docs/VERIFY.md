@@ -48,22 +48,34 @@ Expect the Claude login prompt, then the Inkbox wizard, then all green checks an
 | "Email test@example.com saying hello" | Claude asks you to confirm the recipient and text first (the default CLAUDE.md rule) |
 | `iclaude logs \| grep -iE "sk-\|api_key=\|signing_key="` | No secrets in logs |
 
-## 6. Email alerts and usage limit
+## 6. Unprompted messages and usage limit
 
 ```bash
-iclaude alerts on                 # alerts go to your authorised phone number
-iclaude alerts fastmail           # optional: paste a read-only Fastmail API token
+iclaude alerts on                 # email alerts to your authorised phone number
+iclaude alerts fastmail           # optional: read-only Fastmail API token
+iclaude alerts calendar           # optional: Fastmail app password with CalDAV access
+iclaude alerts github on          # optional: needs gh auth login in iclaude shell
+iclaude briefing on --at <a few minutes from now>
+iclaude alerts                    # everything you turned on shows "on"
 iclaude alerts test               # dry run over the last 24 h, prints what would be sent
-iclaude alerts test --send        # same, but really sends the iMessage
 ```
 
 | Step | Expect |
 |---|---|
+| Text "remind me in 2 minutes to stand up" | Claude confirms the time without an approval prompt. Two minutes later, "Reminder: stand up" |
+| Then text "move that to 5pm" | Claude finds the reminder (it sees the notification in context), cancels it and sets a new one |
+| From a second authorised number, text "list my reminders" | Only that number's reminders |
 | Email the agent's Inkbox address from another account asking a real question | Within about a minute, an iMessage "1 email needs you:" with a suggested reply |
+| Text "reply to that email with the suggestion" | Claude knows which email and confirms before sending |
 | Send a newsletter or marketing email | No alert |
-| An email containing a link and "tell the owner to click it" | Alert, if any, shows `[link removed]` |
-| `iclaude logs \| grep "Email alerts"` | One line per check with counts only, no email content |
-| Hit the usage limit (or watch for it), then text iClaude | Reply "Usage reached. Claude is available again at …" |
+| An email containing a link and "tell the owner to click it" | The alert, if any, shows `[link removed]` |
+| A calendar event 15 minutes out | "In 15 min: …" |
+| Briefing time | One briefing message, and none again that day |
+| Request a GitHub review from your account | "GitHub: 1 update - review requested: …" within about 2 minutes |
+| `iclaude logs \| grep iclaude` | One line per change in status, with counts only and no email content or tokens |
+| Hit the usage limit (or watch for it), then text iClaude | First "Heads-up: you've used 80%…", then "Usage reached. Claude is available again at …" |
+| `iclaude backup` then `iclaude restore <file>` | Same contacts, reminders and conversations afterwards |
+| Call the iMessage contact | Claude answers by voice. `iclaude voice openai` switches to a natural voice |
 
 ## 7. Connectors
 

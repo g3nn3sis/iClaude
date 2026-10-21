@@ -23,6 +23,14 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
   agent inbox and Fastmail that needs you, with suggested replies, triaged by a tool-less
   Claude turn
 - "Usage reached" reply with the reset time when the Claude subscription limit is hit
+- Reminders and scheduled messages set by text (`remind`, `list_reminders` and
+  `cancel_reminder` tools), plus `iclaude reminders`
+- Morning briefing (`iclaude briefing`), calendar heads-ups over CalDAV, a usage warning
+  before the limit, and GitHub, Vercel and Cloudflare Pages alerts, all polled without
+  Claude usage
+- Notifications are mirrored into your conversation, so Claude can act on "reply to that"
+- `iclaude voice` to switch calls between Inkbox voice and OpenAI Realtime
+- `iclaude backup` / `iclaude restore`
 - `iclaude reset`: factory reset that forgets conversations, memory and workspace files but
   keeps the Claude login, Inkbox config and authorised contacts
 - CI: unit and contract tests, ShellCheck, production image build, container and installer

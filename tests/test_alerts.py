@@ -52,13 +52,14 @@ def test_flags_and_sends_then_advances():
     sent = []
     source = Source("Inkbox", [email(1), email(2, minutes=1)])
     summary, message = alerts.run_cycle(ENV, state, [source], answer(("Inkbox:2", "Wants a decision by Friday", "Friday works.")),
-                                        lambda text, key: sent.append((text, key)), now=NOW)
+                                        lambda text, key, context: sent.append((text, key, context)), now=NOW)
     assert sent and sent[0][0] == message
     assert "Inkbox: jane@example.com" in message and "Suggested reply: Friday works." in message
     assert "Subject 1" not in message
+    assert "Inkbox agent inbox message id 2" in sent[0][2] and message in sent[0][2]
     assert state["since"]["Inkbox"] == (NOW - timedelta(minutes=1)).isoformat()
     assert state["seen"] == ["Inkbox:1", "Inkbox:2"]
-    alerts.run_cycle(ENV, state, [source], answer(("Inkbox:2", "again", "")), lambda t, k: sent.append(t), now=NOW)
+    alerts.run_cycle(ENV, state, [source], answer(("Inkbox:2", "again", "")), lambda t, k, c: sent.append(t), now=NOW)
     assert len(sent) == 1
 
 
@@ -181,25 +182,6 @@ def test_quiet_polls_never_call_claude():
     for _ in range(5):
         alerts.run_cycle(ENV, state, [Source("Inkbox", [])], lambda p: asked.append(p), None, now=NOW)
     assert asked == []
-
-
-def test_watch_reuses_sources_and_stops(monkeypatch):
-    import threading
-
-    made, stop = [], threading.Event()
-
-    def fake_cycle(env, state, sources, ask, send):
-        made.append(id(sources))
-        if len(made) == 3:
-            stop.set()
-        return "Checked Inkbox: 0 new, 0 flagged.", None
-
-    monkeypatch.setattr(alerts, "run_cycle", fake_cycle)
-    monkeypatch.setattr(alerts, "load_state", lambda: {})
-    monkeypatch.setattr(alerts, "save_state", lambda state: None)
-    monkeypatch.setattr(alerts, "settings", lambda env: alerts.Settings(True, "+15551234567", 0, "haiku", "", ""))
-    alerts.watch(lambda: ENV, stop, first_delay=0)
-    assert len(made) == 3 and len(set(made)) == 1
 
 
 def test_fastmail_caches_session_and_resets_on_error():

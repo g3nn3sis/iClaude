@@ -65,3 +65,25 @@ def test_sdk_options_used_by_alerts():
 
     fields = {f.name for f in dataclasses.fields(ClaudeAgentOptions)}
     assert {"tools", "strict_mcp_config", "setting_sources", "can_use_tool", "max_turns", "env"} <= fields
+
+
+def test_session_internals_used_by_hooks():
+    import inspect
+
+    from inkbox_claude import gateway, sessions, tools
+
+    assert hasattr(tools, "CURRENT_SESSION")
+    assert "CURRENT_SESSION.set(self)" in inspect.getsource(sessions.ContactSession._ensure_client)
+    assert list(inspect.signature(sessions.ContactSession.handle_inbound).parameters) == ["self", "text", "mode", "meta"]
+    assert list(inspect.signature(sessions.ContactSession.buffer_context).parameters)[:3] == ["self", "text", "source_id"]
+    assert "Earlier group messages are context" in inspect.getsource(sessions.ContactSession._run_turn)
+    assert "self.sessions = SessionManager(" in inspect.getsource(gateway.InkboxGateway.run)
+    assert '"sender": sender' in inspect.getsource(gateway.InkboxGateway._on_imessage_received_once)
+
+
+def test_usage_and_voice_helpers_exist():
+    from inkbox_claude import claude_usage, config, setup_wizard
+
+    assert callable(claude_usage.fetch_usage)
+    assert {s.value for s in config.VoiceStack} >= {"openai_realtime", "inkbox_tts_stt"}
+    assert callable(setup_wizard._save_voice_stack)

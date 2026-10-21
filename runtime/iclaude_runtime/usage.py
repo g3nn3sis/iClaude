@@ -27,9 +27,7 @@ def limit_signal(message: Any) -> tuple[bool, int | None]:
     return False, None
 
 
-def notice(resets_at: int | None, tz: str | None = None) -> str:
-    if not resets_at:
-        return "Usage reached."
+def reset_time(resets_at: int, tz: str | None = None) -> str:
     try:
         zone = ZoneInfo(tz or os.environ.get("TZ") or "UTC")
     except (KeyError, ValueError):
@@ -37,7 +35,13 @@ def notice(resets_at: int | None, tz: str | None = None) -> str:
     when = datetime.fromtimestamp(resets_at, tz=timezone.utc).astimezone(zone)
     today = datetime.now(zone).date()
     stamp = when.strftime("%H:%M") if when.date() == today else when.strftime("%a %d %b %H:%M")
-    return f"Usage reached. Claude is available again at {stamp} ({when.tzname()})."
+    return f"{stamp} ({when.tzname()})"
+
+
+def notice(resets_at: int | None, tz: str | None = None) -> str:
+    if not resets_at:
+        return "Usage reached."
+    return f"Usage reached. Claude is available again at {reset_time(resets_at, tz)}."
 
 
 class LimitTracker:
@@ -80,3 +84,32 @@ def install() -> None:
 
     receive_response._iclaude_usage = True
     ClaudeSDKClient.receive_response = receive_response
+
+
+WARN_WINDOWS = (("five_hour", "5-hour"), ("seven_day", "weekly"))
+
+
+def warnings(data: dict, threshold: float, warned: set[str], tz: str | None = None) -> list[tuple[str, str]]:
+    """Return (key, text) for each usage window that crossed the threshold and was not warned about."""
+    out = []
+    for name, label in WARN_WINDOWS:
+        block = data.get(name)
+        if not isinstance(block, dict) or block.get("utilization") is None:
+            continue
+        used = float(block["utilization"])
+        reset = _reset_epoch(block.get("resets_at"))
+        key = f"{name}:{reset // 3600 if reset else block.get('resets_at')}"
+        if used < threshold or key in warned:
+            continue
+        out.append((key, f"Heads-up: you've used {round(used)}% of your {label} Claude limit"
+                         + (f". It resets at {reset_time(reset, tz)}." if reset else ".")))
+    return out
+
+
+def _reset_epoch(value) -> int | None:
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
