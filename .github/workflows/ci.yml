@@ -68,6 +68,12 @@ jobs:
           docker compose down
           docker compose up -d --no-build
           docker compose exec -T iclaude iclaude-container check authorised
+      - name: Email alerts only go to an authorised phone
+        run: |
+          if docker compose exec -T iclaude iclaude-container alerts on --to +15550000000; then exit 1; fi
+          docker compose exec -T iclaude iclaude-container alerts on
+          docker compose exec -T iclaude iclaude-container alerts | grep -q "Recipient: +15551234567"
+          docker compose exec -T iclaude iclaude-container alerts off
       - name: Factory reset keeps logins and config
         run: |
           docker compose exec -T iclaude sh -c 'mkdir -p ~/.claude/projects/-workspace /workspace/repo && echo {} > ~/.claude/.credentials.json && echo {} > ~/.inkbox-claude/sessions.json && echo x > /workspace/repo/f'

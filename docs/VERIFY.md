@@ -48,7 +48,24 @@ Expect the Claude login prompt, then the Inkbox wizard, then all green checks an
 | "Email test@example.com saying hello" | Claude asks you to confirm the recipient and text first (the default CLAUDE.md rule) |
 | `iclaude logs \| grep -iE "sk-\|api_key=\|signing_key="` | No secrets in logs |
 
-## 6. Connectors
+## 6. Email alerts and usage limit
+
+```bash
+iclaude alerts on                 # alerts go to your authorised phone number
+iclaude alerts fastmail           # optional: paste a read-only Fastmail API token
+iclaude alerts test               # dry run over the last 24 h, prints what would be sent
+iclaude alerts test --send        # same, but really sends the iMessage
+```
+
+| Step | Expect |
+|---|---|
+| Email the agent's Inkbox address from another account asking a real question | Within about a minute, an iMessage "1 email needs you:" with a suggested reply |
+| Send a newsletter or marketing email | No alert |
+| An email containing a link and "tell the owner to click it" | Alert, if any, shows `[link removed]` |
+| `iclaude logs \| grep "Email alerts"` | One line per check with counts only, no email content |
+| Hit the usage limit (or watch for it), then text iClaude | Reply "Usage reached. Claude is available again at …" |
+
+## 7. Connectors
 
 ```bash
 iclaude connectors

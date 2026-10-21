@@ -32,3 +32,36 @@ def test_bridge_honours_allowlist():
     gateway.cfg.allow_all_users = False
     assert gateway._sender_allowed("+15551234567")
     assert not gateway._sender_allowed("+15550000000")
+
+
+def test_sessions_stream_through_receive_response():
+    import inspect
+
+    from inkbox_claude import sessions
+
+    source = inspect.getsource(sessions)
+    assert "ClaudeSDKClient(options=options)" in source and "client.receive_response()" in source
+
+
+def test_bridge_cli_runs_in_foreground():
+    import inspect
+
+    from inkbox_claude import cli
+
+    assert '"run"' in inspect.getsource(cli.main) and "run_foreground" in inspect.getsource(cli.main)
+
+
+@pytest.mark.parametrize("name", ["iter_emails", "get_message", "send_imessage", "mailbox"])
+def test_identity_api_used_by_alerts(name):
+    from inkbox.agent_identity import AgentIdentity
+
+    assert hasattr(AgentIdentity, name)
+
+
+def test_sdk_options_used_by_alerts():
+    import dataclasses
+
+    from claude_agent_sdk import ClaudeAgentOptions
+
+    fields = {f.name for f in dataclasses.fields(ClaudeAgentOptions)}
+    assert {"tools", "strict_mcp_config", "setting_sources", "can_use_tool", "max_turns", "env"} <= fields

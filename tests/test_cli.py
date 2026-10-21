@@ -14,10 +14,10 @@ def test_run_waits_for_preflight_then_execs_bridge(monkeypatch):
     monkeypatch.setattr(cli.time, "sleep", sleeps.append)
     monkeypatch.setattr(cli, "seed_claude_md", lambda home: False)
     monkeypatch.setattr(cli, "memory_environment", lambda env: "on")
-    monkeypatch.setattr(cli.os, "execvp", lambda file, args: execs.append(args))
+    monkeypatch.setattr(cli.os, "execv", lambda file, args: execs.append(args[1:]))
     cli.cmd_run()
     assert sleeps == [cli.WAIT_SECONDS, cli.WAIT_SECONDS]
-    assert execs == [["inkbox-claude", "run"]]
+    assert execs == [["-m", "iclaude_runtime.bridge"]]
 
 
 def test_run_logs_unchanged_failures_once(monkeypatch, capsys):
@@ -26,7 +26,7 @@ def test_run_logs_unchanged_failures_once(monkeypatch, capsys):
     monkeypatch.setattr(cli.time, "sleep", lambda s: None)
     monkeypatch.setattr(cli, "seed_claude_md", lambda home: False)
     monkeypatch.setattr(cli, "memory_environment", lambda env: "on")
-    monkeypatch.setattr(cli.os, "execvp", lambda file, args: None)
+    monkeypatch.setattr(cli.os, "execv", lambda file, args: None)
     cli.cmd_run()
     assert capsys.readouterr().out.count("waiting for setup") == 1
 
