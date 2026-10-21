@@ -39,7 +39,12 @@ Usage: ./iclaude <command>
   connectors       Which Claude connectors (GitHub, Fastmail, Vercel, Cloudflare...) the bridge can use
   update           Pull the latest iClaude, rebuild and restart (rolls back if checks fail)
   auto-update [on|off|status]  Daily automatic updates via cron
-  alerts [status|on|off|fastmail|test]  iMessage alerts for new email that needs you
+  alerts [action]  Unprompted iMessages: email, calendar, usage, GitHub, Vercel, Cloudflare
+  briefing [on --at 08:00|off|test]  Daily morning briefing
+  reminders [list|cancel ID]   Reminders you set by texting iClaude
+  voice [openai|inkbox]        How phone calls are answered
+  backup [file] [--with-workspace]  Save login, config and conversations to a file
+  restore <file>               Restore a backup (replaces current data)
   reset [--yes]                Forget conversations, memory and workspace; keep logins and config
   uninstall [--purge]          Remove iClaude; --purge also deletes your data
   shell            Open a shell inside the container
@@ -104,9 +109,45 @@ case "$cmd" in
       *) die "Usage: iclaude auto-update [on|off|status]" ;;
     esac
     ;;
-  alerts)
-    in_container alerts "$@"
-    case "${1:-}" in on|off|fastmail) if running; then compose restart iclaude; fi ;; esac
+  alerts|briefing|voice)
+    in_container "$cmd" "$@"
+    case "${1:-status}" in status|test) ;; *) if running; then compose restart iclaude; fi ;; esac
+    ;;
+  reminders) in_container reminders "$@" ;;
+  backup)
+    out="" paths="home/iclaude"
+    for arg in "$@"; do
+      case "$arg" in
+        --with-workspace) paths="home/iclaude workspace" ;;
+        -*) die "Usage: iclaude backup [file] [--with-workspace]" ;;
+        *) out="$arg" ;;
+      esac
+    done
+    out="${out:-iclaude-backup-$(date +%Y%m%d-%H%M%S).tar.gz}"
+    was_running=0
+    if running; then was_running=1; compose stop iclaude; fi
+    # shellcheck disable=SC2086
+    (umask 077 && compose run --rm -T --entrypoint tar iclaude -czf - -C / $paths > "$out") || { rm -f "$out"; die "Backup failed."; }
+    if [ "$was_running" -eq 1 ]; then compose up -d; fi
+    echo "Saved $out ($(du -h "$out" | cut -f1)). It contains your logins and tokens: keep it private."
+    ;;
+  restore)
+    file="${1:-}"
+    [ -f "$file" ] || die "Usage: iclaude restore <backup file>"
+    contents="$(tar -tzf "$file" 2>/dev/null)" || die "$file is not a readable backup."
+    grep -q '^home/iclaude/' <<<"$contents" || die "$file is not an iClaude backup."
+    workspace=0
+    if grep -q '^workspace/' <<<"$contents"; then workspace=1; fi
+    echo "Restoring replaces your current login, config and conversations$([ "$workspace" -eq 1 ] && echo ", and the workspace") with $file."
+    { : </dev/tty; } 2>/dev/null || die "No terminal to confirm on."
+    read -r -p "Type restore to continue: " answer </dev/tty
+    [ "$answer" = "restore" ] || { echo "Nothing was changed."; exit 0; }
+    if running; then compose stop iclaude; fi
+    # shellcheck disable=SC2016
+    compose run --rm -T -e WORKSPACE="$workspace" --entrypoint sh iclaude -c \
+      'find /home/iclaude -mindepth 1 -delete && if [ "$WORKSPACE" = 1 ]; then find /workspace -mindepth 1 -delete; fi && tar -xzf - -C /' < "$file"
+    compose up -d
+    echo "Restored."
     ;;
   reset)
     [ $# -eq 0 ] || [ "$1" = "--yes" ] || die "Usage: iclaude reset [--yes]"

@@ -58,7 +58,11 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
 | `./iclaude update` | Pull the latest version, rebuild and restart; rolls back if checks start failing |
 | `./iclaude auto-update [on\|off\|status]` | Daily automatic updates (cron, around 04:00 server time) |
-| `./iclaude alerts [on\|off\|fastmail\|test]` | iMessage alerts for new email that needs you (Inkbox inbox, optional Fastmail) |
+| `./iclaude alerts [action]` | Unprompted iMessages: email, calendar, usage, GitHub, Vercel, Cloudflare (see below) |
+| `./iclaude briefing [on --at 07:30\|off\|test]` | Daily morning briefing |
+| `./iclaude reminders [list\|cancel ID]` | Reminders set by texting iClaude |
+| `./iclaude voice [openai\|inkbox]` | How phone calls are answered |
+| `./iclaude backup [file] [--with-workspace]` / `restore <file>` | Save or restore your login, config and conversations |
 | `./iclaude reset` | Factory reset: forget conversations, memory and workspace files, keep logins and config |
 | `./iclaude uninstall [--purge]` | Remove iClaude; `--purge` also deletes your data |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
@@ -90,11 +94,29 @@ bridge on its own. Docker restarts it after crashes and reboots.
   is authorised. That keeps contacts from seeing each other's facts. Set
   `ICLAUDE_SHARED_MEMORY=true` in `.env` next to `compose.yaml` only if every contact may share it.
 
-## Email alerts
+## Unprompted messages
 
-Off by default. With alerts on, iClaude checks the agent's Inkbox inbox every 30 seconds,
-plus your Fastmail inbox if you connect it. When something new needs you, you get one
-iMessage like:
+iClaude can text you first. Everything below goes only to your authorised phone number. Each
+message also lands in your conversation with Claude, so you can answer "reply to that",
+"push that reminder to 6" or "look into that failed deploy" and Claude knows what you mean.
+Checking is plain API polling and uses **none of your Claude usage**. The one exception is
+new email, which costs one small Haiku turn to decide whether it needs you.
+
+`iclaude alerts` shows what is on. Each command below asks for what it needs and checks it
+before saving anything.
+
+| Feature | Turn on | What you get |
+|---|---|---|
+| Reminders and scheduled messages | always on | Text "remind me at 5 to call mum" or "every weekday at 8 tell me to stretch". iClaude texts you at that time. `iclaude reminders` lists or cancels them |
+| Morning briefing | `iclaude briefing on --at 07:30` | Today's calendar, today's reminders and unread GitHub count, once a day |
+| Email | `iclaude alerts on`, `iclaude alerts fastmail` | Agent inbox and Fastmail checked every 30 s. Only mail that needs you, with a suggested reply |
+| Calendar | `iclaude alerts calendar [--lead 15]` | "In 15 min: Dentist at 14:00 (Main St)" from Fastmail or any CalDAV calendar |
+| Usage warning | on by default (`iclaude alerts usage 90` or `off`) | A text when your 5-hour or weekly Claude limit passes 80% |
+| GitHub | `iclaude alerts github on` | Review requests, mentions, assignments, CI runs, security alerts (uses the `gh` login in `iclaude shell`) |
+| Vercel | `iclaude alerts vercel` | Failed deploys |
+| Cloudflare | `iclaude alerts cloudflare` | Failed Pages deploys |
+
+Example email alert:
 
 ```
 1 email needs you:
@@ -105,32 +127,52 @@ Wants your sign-off on section 4 by Friday.
 Suggested reply: Thanks Jane, I'll review it and get back to you by Thursday.
 ```
 
-The alert is not part of your conversation history, so when you answer, name the email
-("reply to Jane's contract email with that suggestion"). Claude finds it through Inkbox or your
-Fastmail connector and confirms before sending, as usual.
+Credentials to create:
 
-```bash
-iclaude alerts on        # alerts go to your first authorised phone number (or --to +1555...)
-iclaude alerts fastmail  # paste a Fastmail API token; create it with read-only Email access
-iclaude alerts test      # dry run over the last 24 hours
-iclaude alerts off
-```
+- **Fastmail email:** Settings > Privacy & Security > API tokens, with **Email** access and **Read-only** ticked.
+- **Fastmail calendar:** Settings > Privacy & Security > App passwords, with **Calendars (CalDAV)** access only.
+  For another provider, set `ICLAUDE_CALDAV_URL` to your calendar home URL.
+- **Vercel:** Account Settings > Tokens. **Cloudflare:** an API token with *Cloudflare Pages: Read*, plus your account ID.
 
-How it stays safe: Claude reads the new mail in a separate turn with **no tools at all**, so
-a malicious email cannot make it run commands or send anything. iClaude sends the alert, and
-only to an authorised phone number. Links are stripped from alerts. Mail from your own
-authorised addresses is skipped, because the bridge already answers those as conversations.
-Fetching an Inkbox email marks it read in the agent's inbox. Fastmail is read only, so
-nothing changes there. The checks themselves are plain API calls and use none of your Claude
-usage. Only a check that finds new mail runs one small Claude (Haiku) turn to decide whether
-it needs you. Change the interval with `ICLAUDE_ALERT_INTERVAL` (seconds, minimum 15) and the
+How it stays safe:
+
+- **Email.** Claude reads new mail in a separate turn with **no tools at all**, so a malicious
+  email cannot make it run commands or send anything. Links are stripped from alerts. Mail from
+  your own authorised addresses is skipped, because the bridge already answers those.
+- **Read-only.** Fetching an Inkbox email marks it read in the agent's inbox. Fastmail,
+  calendar, GitHub, Vercel and Cloudflare are only read.
+- **Reminders.** A reminder is texted to the person who asked for it, only to an authorised
+  number, and always as fixed text. Scheduled messages to anyone else are not possible.
+- **Tokens.** Tokens live in the mode-600 bridge `.env` in the home volume and are never logged.
+
+Change the email interval with `ICLAUDE_ALERT_INTERVAL` (seconds, minimum 15) and the triage
 model with `ICLAUDE_ALERT_MODEL` in the bridge `.env`.
+
+## Voice calls
+
+Call the same iMessage contact you text, from an authorised number. The bridge answers with
+Inkbox speech-to-text and text-to-speech by default. `iclaude voice openai` switches to OpenAI
+Realtime for a natural voice. It needs an OpenAI API key, sends call audio to OpenAI and is
+billed by OpenAI. `iclaude voice inkbox` switches back. Inkbox can also give the agent its own
+phone number on paid plans, through `iclaude setup`.
 
 ## Usage limit
 
 When your Claude plan's limit is reached, iClaude answers texts with "Usage reached. Claude
 is available again at 17:00 (BST)." (the reset time is shown when Claude reports it) instead
 of the raw Claude Code error. Email alerts pause until the limit resets, and no mail is lost.
+The usage warning above texts you before you get there.
+
+## Backup
+
+```bash
+iclaude backup                      # iclaude-backup-<date>.tar.gz in the current directory
+iclaude backup ~/b.tgz --with-workspace
+iclaude restore ~/b.tgz             # asks you to type "restore"; replaces current data
+```
+
+iClaude stops for a few seconds while the backup is taken. The file holds your logins and
+tokens, so it is created mode 600. Keep it private.
 
 ## Where state lives
 
@@ -139,8 +181,8 @@ of the raw Claude Code error. Email alerts pause until the limit resets, and no 
 | `iclaude_home` | `/home/iclaude` | Claude login, bridge config and sessions, `gh` login, git config |
 | `iclaude_workspace` | `/workspace` | Claude's working directory (repos, files, `CLAUDE.md`) |
 
-Back up with `docker run --rm -v iclaude_home:/v -v "$PWD":/b alpine tar czf /b/home.tgz -C /v .`
-while iClaude is stopped. `docker compose down -v` **deletes** all state.
+Back up with `iclaude backup` (see [Backup](#backup)). `docker compose down -v` **deletes** all state.
+iClaude's own state (reminders, notification cursors) is in `~/.iclaude` in the home volume.
 
 ## Updates
 

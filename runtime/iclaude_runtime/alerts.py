@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
 import re
 import tempfile
-import threading
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
-from .checks import PHONE_RE, is_true, parse_contacts
+from .checks import is_true, parse_contacts
+from .notify import owner
 from .usage import limit_signal
 
 log = logging.getLogger("iclaude.alerts")
@@ -79,16 +78,7 @@ class Settings:
 
 
 def settings(env: Mapping[str, str]) -> Settings:
-    allowed, _ = parse_contacts(env.get("INKBOX_ALLOWED_USERS", ""))
-    phones = [c for c in allowed if PHONE_RE.match(c)]
-    recipient = (env.get("ICLAUDE_ALERT_TO") or "").strip() or (phones[0] if phones else "")
-    problem = ""
-    if not recipient:
-        problem = "No phone number to alert. Authorise your iMessage number or set ICLAUDE_ALERT_TO."
-    elif recipient not in allowed:
-        problem = f"Alert recipient {recipient} is not an authorised contact."
-    elif not PHONE_RE.match(recipient):
-        problem = f"Alert recipient {recipient} is not a +E.164 phone number."
+    recipient, problem = owner(env)
     try:
         interval = max(MIN_INTERVAL_SECONDS, int(env.get("ICLAUDE_ALERT_INTERVAL") or DEFAULT_INTERVAL_SECONDS))
     except ValueError:
@@ -286,6 +276,15 @@ def format_message(alerts: list[tuple[Email, str, str]]) -> str:
     return text if len(text) <= SMS_LIMIT else text[: SMS_LIMIT - 30].rstrip() + "\n\n(more in your inbox)"
 
 
+def context_note(alerts: list[tuple[Email, str, str]]) -> str:
+    """What Claude sees in the conversation, so "reply to that" can find the email."""
+    lines = [format_message(alerts), "", "Email references:"]
+    for email, _, _ in alerts:
+        where = "Inkbox agent inbox message id" if email.source == "Inkbox" else "Fastmail email id"
+        lines.append(f"- {email.sender} \"{email.subject}\": {where} {email.id}")
+    return "\n".join(lines)
+
+
 async def ask_claude(prompt: str, model: str) -> str:
     from claude_agent_sdk import (
         AssistantMessage,
@@ -341,7 +340,7 @@ def run_cycle(
     state: dict,
     sources: list,
     ask: Callable[[str], str],
-    send: Callable[[str, str], None] | None,
+    send: Callable[[str, str, str], None] | None,
     now: datetime | None = None,
     lookback: timedelta | None = None,
 ) -> tuple[str, str | None]:
@@ -377,7 +376,7 @@ def run_cycle(
                 message = format_message(alerts)
                 if send:
                     key = "iclaude-alert-" + hashlib.sha256("|".join(a[0].key for a in alerts).encode()).hexdigest()[:32]
-                    send(message, key)
+                    send(message, key, context_note(alerts))
         except UsageLimited as exc:
             state["paused_until"] = exc.resets_at or (now + timedelta(hours=1)).timestamp()
             return "Claude usage limit reached; will retry after it resets.", None
@@ -405,44 +404,3 @@ def make_sources(env: Mapping[str, str], conf: Settings) -> list:
     if conf.fastmail_token:
         sources.append(FastmailSource(conf.fastmail_token))
     return sources
-
-
-def imessage_sender(env: Mapping[str, str], recipient: str) -> Callable[[str, str], None]:
-    def send(text: str, key: str) -> None:
-        from inkbox import Inkbox
-        from inkbox_claude.config import inkbox_client_kwargs
-
-        client = Inkbox(**inkbox_client_kwargs(env.get("INKBOX_API_KEY", ""), env.get("INKBOX_BASE_URL")))
-        client.get_identity(env.get("INKBOX_IDENTITY", "")).send_imessage(to=recipient, text=text, idempotency_key=key)
-
-    return send
-
-
-def watch(env_loader: Callable[[], Mapping[str, str]], stop: threading.Event, first_delay: float = 30) -> None:
-    """Poll mail without Claude; only a check that finds new mail spends a Claude turn."""
-    stop.wait(first_delay)
-    sources, signature, last_log = [], None, None
-    while not stop.is_set():
-        env = env_loader()
-        conf = settings(env)
-        if conf.enabled and not conf.problem:
-            if signature != (env.get("INKBOX_IDENTITY"), conf.fastmail_token):
-                sources, signature = make_sources(env, conf), (env.get("INKBOX_IDENTITY"), conf.fastmail_token)
-            state = load_state()
-            try:
-                summary, _ = run_cycle(env, state, sources,
-                                       lambda prompt: asyncio.run(ask_claude(prompt, conf.model)),
-                                       imessage_sender(env, conf.recipient))
-            except Exception as exc:
-                summary = f"check failed: {type(exc).__name__}"
-            if summary != last_log:
-                log.info("Email alerts: %s", summary)
-            last_log = summary
-            save_state(state)
-        stop.wait(conf.interval)
-
-
-def start_background(env_loader: Callable[[], Mapping[str, str]]) -> threading.Thread:
-    thread = threading.Thread(target=watch, args=(env_loader, threading.Event()), name="iclaude-alerts", daemon=True)
-    thread.start()
-    return thread
