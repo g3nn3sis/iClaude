@@ -14,6 +14,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      ICLAUDE_SHARED_MEMORY: ${ICLAUDE_SHARED_MEMORY:-false}
     volumes:
       - home:/home/iclaude
       - workspace:/workspace

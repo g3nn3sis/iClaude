@@ -47,8 +47,15 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
    Project directory is fixed to the workspace volume, and systemd/launchd autostart
    is replaced by Docker's restart policy. After the wizard it asks for the
    allowlist.
-7. **Host CLI** (`./iclaude`): setup, login, allow, start, stop, restart, status, logs,
-   doctor, update, shell.
+7. **Host CLI** (`./iclaude`): setup, login, allow, start, stop, restart, status, check,
+   logs, doctor, update, shell.
+8. **Installer** (`install.sh`): checks Docker, clones or updates the repo, links the CLI,
+   starts the container, then runs login and setup only when their checks fail.
+9. **Conversational defaults**: a user-level `~/.claude/CLAUDE.md` seeded once (never
+   overwritten) that sets tone and requires confirmation for outward or irreversible
+   actions. The bridge auto-allows its own Inkbox send tools, so this is the guard against
+   messaging third parties unasked. No custom memory system: Claude Code auto memory
+   plus Inkbox contact memories cover it.
 
 ### Security decision: local allowlist
 
@@ -60,11 +67,12 @@ without one.
 
 ### Known limits to resolve in later phases
 
-- **Contact isolation.** Sessions and Inkbox contact memories are per contact, but
-  all contacts share `/workspace`, `~/.claude/CLAUDE.md` and Claude Code's project
-  memory. The default (and recommendation) is a single owner contact. Proper
-  multi-contact isolation needs per-contact workspaces, which the bridge does not
-  support today.
+- **Contact isolation.** Sessions and Inkbox contact memories are per contact.
+  Claude Code's auto memory is per project directory, so iClaude sets
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` when more than one contact is authorised (opt out
+  with `ICLAUDE_SHARED_MEMORY=true`). Files in `/workspace` are still shared, so the
+  recommended setup is a single owner contact. Full isolation would need per-contact
+  workspaces, which the bridge does not support today.
 - **Connectors.** Claude.ai remote connectors (GitHub, Fastmail, Vercel, Cloudflare)
   should load in a session logged in with the subscription account, but this
   has not yet been verified inside a bridged session.
@@ -75,8 +83,8 @@ without one.
 |---|---|---|
 | 1. Research | Inspect bridge, decide architecture (this document) | Done |
 | 2. Docker MVP | Image, Compose, volumes, login, preflight, host CLI | Done; live auth untested |
-| 3. Easy install | `install.sh` for fresh VPS, default conversational CLAUDE.md, memory defaults | Next |
-| 4. Test & release | Live E2E checklist, connector verification, CI, v0.1.0 | Planned |
+| 3. Easy install | `install.sh` for fresh VPS, default conversational CLAUDE.md, memory defaults | Done; live auth untested |
+| 4. Test & release | Live E2E checklist, connector verification, CI, v0.1.0 | Next |
 
 ## Pinned versions
 
