@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-from . import alerts, hooks, reminders, scheduler, usage
+from . import alerts, approvals, hooks, reminders, scheduler, usage
 from .checks import effective_env
 from .notify import owner
 
 
 def main() -> int:
     usage.install()
-    hooks.install(lambda: reminders.tool_server(effective_env))
+    hooks.install(lambda: reminders.tool_server(effective_env), effective_env)
     env = effective_env()
+    auto = approvals.enabled(env)
+    print(f"Auto-approve: {', '.join(auto) if auto else 'off'} (change with ./iclaude approve)", flush=True)
+    print(f"Claude Code auto mode: {'on' if approvals.auto_mode(Path.home()) else 'off'} (change with ./iclaude auto-mode)", flush=True)
     phone, problem = owner(env)
     conf = alerts.settings(env)
     if problem:

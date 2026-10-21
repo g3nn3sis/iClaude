@@ -87,3 +87,13 @@ def test_usage_and_voice_helpers_exist():
     assert callable(claude_usage.fetch_usage)
     assert {s.value for s in config.VoiceStack} >= {"openai_realtime", "inkbox_tts_stt"}
     assert callable(setup_wizard._save_voice_stack)
+
+
+def test_permission_callback_used_by_auto_approve():
+    import inspect
+
+    from inkbox_claude import sessions
+
+    assert list(inspect.signature(sessions.ContactSession._can_use_tool).parameters) == ["self", "tool_name", "input_data", "context"]
+    source = inspect.getsource(sessions.ContactSession._ensure_client)
+    assert "can_use_tool=self._can_use_tool" in source and '"append": prompt_append' in source

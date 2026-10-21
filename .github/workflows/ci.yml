@@ -78,6 +78,13 @@ jobs:
           docker compose exec -T iclaude iclaude-container briefing test | grep -q "Good morning"
           docker compose exec -T iclaude iclaude-container reminders | grep -q "No reminders"
           docker compose exec -T iclaude iclaude-container voice | grep -q "Inkbox speech-to-text"
+          docker compose exec -T iclaude iclaude-container auto-mode on
+          docker compose exec -T iclaude sh -c 'grep -q "\"defaultMode\": \"auto\"" ~/.claude/settings.json'
+          docker compose exec -T iclaude iclaude-container check permission | grep -q "auto mode"
+          docker compose exec -T iclaude iclaude-container auto-mode off
+          docker compose exec -T iclaude iclaude-container approve on calendar email
+          docker compose exec -T iclaude iclaude-container approve | grep -q "on   calendar"
+          docker compose exec -T iclaude iclaude-container approve off all
       - name: Backup contains the config and restores it
         run: |
           ./iclaude backup "$RUNNER_TEMP/b.tgz" --with-workspace

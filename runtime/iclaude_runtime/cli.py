@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 from .checks import Check, effective_env, env_file_path, parse_contacts, preflight
-from . import manage
+from . import approvals, manage
 from .defaults import memory_environment, seed_claude_md
 
 GREEN, RED, YELLOW, BOLD, RESET = ("\033[32m", "\033[31m", "\033[33m", "\033[1m", "\033[0m") if sys.stdout.isatty() else ("",) * 5
@@ -77,6 +77,55 @@ def cmd_allow(contacts: list[str], replace: bool, remove: bool) -> int:
     _save("INKBOX_ALLOWED_USERS", ",".join(updated))
     _save("INKBOX_ALLOW_ALL_USERS", "false")
     print("Authorised contacts:", ", ".join(updated) if updated else "(none, the bridge will not start)")
+    return 0
+
+
+def cmd_approve(action: str, names: list[str]) -> int:
+    env = effective_env()
+    if action == "status":
+        current = approvals.enabled(env)
+        print("Auto-approve (the agent acts without texting you for a yes):")
+        for line in approvals.status_lines(env):
+            print(f"  {line}")
+        print("Everything else, including shell commands and file edits, still asks first.")
+        if not current:
+            print("Turn some on with: ./iclaude approve on calendar email")
+        return 0
+    chosen, unknown = approvals.parse(",".join(names))
+    if unknown or not chosen:
+        bad = f"Unknown: {', '.join(unknown)}. " if unknown else ""
+        print(f"{RED}{bad}Choose from: {', '.join(approvals.BY_NAME)} or all{RESET}")
+        return 1
+    current = approvals.enabled(env)
+    updated = [n for n in approvals.BY_NAME if (n in current or n in chosen) and not (action == "off" and n in chosen)]
+    _save(approvals.SETTING, ",".join(updated) or "none")
+    print(f"Auto-approve: {', '.join(updated) if updated else 'off'}")
+    risky = [n for n in updated if n in ("email", "deploy", "delete", "pay")]
+    if action == "on" and risky:
+        print(f"{YELLOW}With {', '.join(risky)} auto-approved, a mistaken or malicious request (for example inside an "
+              f"email Claude reads) could make it act without you seeing it first. Undo with: ./iclaude approve off "
+              f"{' '.join(risky)}{RESET}")
+    return 0
+
+
+def cmd_auto_mode(action: str) -> int:
+    home = Path.home()
+    if action in ("on", "off"):
+        try:
+            approvals.set_auto_mode(home, action == "on")
+        except ValueError as exc:
+            print(f"{RED}{exc}{RESET}")
+            return 1
+    if approvals.auto_mode(home):
+        print("Claude Code auto mode is on: a safety classifier approves routine actions instead of texting you.")
+        print("It still blocks risky ones (production deploys, force pushes, mass deletes, leaking data). If it blocks")
+        print("the same thing repeatedly you get the usual approval text. Turn off with: ./iclaude auto-mode off")
+        if action == "on" and not approvals.enabled(effective_env()):
+            print("Claude may still double-check in chat before email or calendar changes (CLAUDE.md).")
+            print("To skip that too: ./iclaude approve on calendar email")
+    else:
+        print("Claude Code auto mode is off: actions outside the read-only set are texted to you for approval.")
+        print("Turn on with: ./iclaude auto-mode on")
     return 0
 
 
@@ -208,6 +257,11 @@ def main(argv: list[str] | None = None) -> int:
     manage.register(sub)
     reset = sub.add_parser("reset", help="forget conversations, memory and workspace files; keep logins and config")
     reset.add_argument("--yes", action="store_true", help="delete (otherwise only list what would be removed)")
+    approve = sub.add_parser("approve", help="show or change which actions run without asking you first")
+    approve.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
+    approve.add_argument("categories", nargs="*", help=f"{', '.join(approvals.BY_NAME)} or all")
+    auto_mode = sub.add_parser("auto-mode", help="Claude Code auto mode: a classifier approves routine actions")
+    auto_mode.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
     allow.add_argument("contacts", nargs="*")
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
@@ -237,6 +291,10 @@ def main(argv: list[str] | None = None) -> int:
         from .connectors import report
 
         return report()
+    if args.command == "auto-mode":
+        return cmd_auto_mode(args.action)
+    if args.command == "approve":
+        return cmd_approve(args.action, args.categories)
     if args.command == "allow":
         if not args.contacts:
             current = effective_env().get("INKBOX_ALLOWED_USERS", "")

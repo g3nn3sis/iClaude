@@ -111,6 +111,21 @@ without one.
   setting sources and reads the live MCP status without a model turn. Connector tools are
   not in the bridge's auto-allowed list, so each call is approved by text. This has not
   yet been checked against a real account.
+- **Auto-approve.** `iclaude approve` stores `ICLAUDE_AUTO_APPROVE` (calendar, email,
+  deploy, delete, pay) in the bridge `.env`. `hooks.install` wraps
+  `ContactSession._can_use_tool`: an MCP tool whose name matches an enabled category (by
+  verb and noun words, e.g. `create_event`, `send_email`) is allowed without a text, and
+  everything else, including all built-in tools, falls through to the bridge's escalation.
+  Companion sessions are never auto-approved. The same hook appends a note to bridge
+  sessions' system prompt so Claude stops asking for confirmation in those categories,
+  which overrides the confirmation list in an existing `CLAUDE.md`. Connector tool names
+  have not been checked against a real account.
+- **Auto mode.** `iclaude auto-mode on` sets `permissions.defaultMode: "auto"` in
+  `~/.claude/settings.json` (the only scope where Claude Code honours `auto`). The hook
+  also passes `permission_mode="auto"` to bridge sessions when that is set, so it does
+  not depend on how the SDK resolves the default. The classifier then decides tool calls
+  that are not already allowed; the bridge's `can_use_tool` text approval is only the
+  fallback after repeated blocks. `bypassPermissions` stays refused by preflight.
 
 ## Phases
 

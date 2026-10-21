@@ -16,7 +16,7 @@ CHATS_FILE = Path.home() / ".iclaude" / "chats.json"
 TOOL_SERVER = "iclaude"
 
 _lock = threading.Lock()
-_bridge: dict[str, Any] = {"loop": None, "manager": None}
+_bridge: dict[str, Any] = {"loop": None, "manager": None, "env": dict}
 
 
 def current_session() -> Any:
@@ -72,10 +72,15 @@ def add_context(contact: str, text: str, key: str) -> bool:
     return True
 
 
-def install(tool_factory=None) -> None:
-    """Record where conversations live and give bridge sessions iClaude's tools."""
-    from claude_agent_sdk import ClaudeSDKClient
+def install(tool_factory=None, env_factory=None) -> None:
+    """Record where conversations live; give bridge sessions iClaude's tools and auto-approvals."""
+    from claude_agent_sdk import ClaudeSDKClient, PermissionResultAllow
     from inkbox_claude.sessions import ContactSession, SessionManager
+
+    from . import approvals
+
+    if env_factory:
+        _bridge["env"] = env_factory
 
     if getattr(SessionManager.__init__, "_iclaude", False):
         return
@@ -102,20 +107,39 @@ def install(tool_factory=None) -> None:
                 log.warning("Could not record the conversation for %s", mode)
         return await original_inbound(self, text, mode, meta)
 
+    original_can_use = ContactSession._can_use_tool
+
+    async def can_use_tool(self, tool_name, input_data, context):
+        if not (self.reply_meta or {}).get("companion") and approvals.auto_approves(tool_name, _bridge["env"]()):
+            if self._current_turn is not None:
+                self._current_turn.execution_observed = True
+            log.info("Auto-approved %s (%s)", tool_name, approvals.categorise(tool_name))
+            return PermissionResultAllow()
+        return await original_can_use(self, tool_name, input_data, context)
+
     original_init = ClaudeSDKClient.__init__
 
     def init(self, options=None, *args, **kwargs):
         servers = getattr(options, "mcp_servers", None)
-        if tool_factory and isinstance(servers, dict) and "inkbox" in servers and current_session() is not None:
-            server, names = tool_factory()
-            options = dataclasses.replace(
-                options,
-                mcp_servers={**servers, TOOL_SERVER: server},
-                allowed_tools=list(options.allowed_tools) + [f"mcp__{TOOL_SERVER}__{n}" for n in names],
-            )
+        if isinstance(servers, dict) and "inkbox" in servers and current_session() is not None:
+            if tool_factory:
+                server, names = tool_factory()
+                options = dataclasses.replace(
+                    options,
+                    mcp_servers={**servers, TOOL_SERVER: server},
+                    allowed_tools=list(options.allowed_tools) + [f"mcp__{TOOL_SERVER}__{n}" for n in names],
+                )
+            if options.permission_mode is None and approvals.auto_mode(Path.home()):
+                options = dataclasses.replace(options, permission_mode="auto")
+            note = approvals.prompt_text(_bridge["env"]())
+            prompt = options.system_prompt
+            if note and isinstance(prompt, dict) and prompt.get("type") == "preset":
+                append = f"{prompt['append']}\n\n{note}" if prompt.get("append") else note
+                options = dataclasses.replace(options, system_prompt={**prompt, "append": append})
         original_init(self, options, *args, **kwargs)
 
     manager_init._iclaude = True
     SessionManager.__init__ = manager_init
     ContactSession.handle_inbound = handle_inbound
+    ContactSession._can_use_tool = can_use_tool
     ClaudeSDKClient.__init__ = init
