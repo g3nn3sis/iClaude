@@ -48,6 +48,16 @@ Expect the Claude login prompt, then the Inkbox wizard, then all green checks an
 | "Email test@example.com saying hello" (email auto-approve off) | Claude asks you to confirm the recipient and text first (the default CLAUDE.md rule) |
 | `iclaude logs \| grep -iE "sk-\|api_key=\|signing_key="` | No secrets in logs |
 
+## 4a. Reply rhythm
+
+| Step | Expect |
+|---|---|
+| "what's 2+2?" | One short text, no heads-up |
+| "look through /workspace and tell me what each repo is for" | A heads-up text within a few seconds, maybe an update, then the answer as one or more separate texts |
+| `iclaude logs \| grep "Replies:"` | `Replies: natural` |
+| `iclaude replies single`, repeat the /workspace request | One message at the end |
+| `iclaude replies natural` | Back to the default |
+
 ## 5a. Auto-approve and auto mode
 
 | Step | Expect |

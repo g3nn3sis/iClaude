@@ -85,6 +85,9 @@ jobs:
           docker compose exec -T iclaude iclaude-container approve on calendar email
           docker compose exec -T iclaude iclaude-container approve | grep -q "on   calendar"
           docker compose exec -T iclaude iclaude-container approve off all
+          docker compose exec -T iclaude iclaude-container replies | grep -q "Replies: natural"
+          docker compose exec -T iclaude iclaude-container replies single | grep -q "Replies: single"
+          docker compose exec -T iclaude iclaude-container replies natural
       - name: Backup contains the config and restores it
         run: |
           ./iclaude backup "$RUNNER_TEMP/b.tgz" --with-workspace

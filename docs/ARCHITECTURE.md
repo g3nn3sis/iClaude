@@ -120,6 +120,17 @@ without one.
   sessions' system prompt so Claude stops asking for confirmation in those categories,
   which overrides the confirmation list in an existing `CLAUDE.md`. Connector tool names
   have not been checked against a real account.
+- **Reply rhythm.** The bridge sends a turn's whole reply as one message, though its prompt
+  tells Claude each paragraph becomes its own bubble. In the default `natural` style
+  (`ICLAUDE_REPLY_STYLE`), `hooks.stream_updates` wraps a bridge client's
+  `receive_response` and sends the text Claude writes before a tool call straight away
+  through `ContactSession._reply` (first one always, then at most one per 20 s and four per
+  turn). The wrapped `ContactSession._deliver_reply` splits the final reply into at most four
+  paragraphs, drops ones already sent as updates, and sends the last one through the
+  bridge's own delivery so its receipts and failure handling stay intact. A system-prompt
+  note asks Claude for a heads-up, sparse updates and a separate result. Only direct
+  iMessage and SMS turns are affected; capture, companion, group, email, Slack and voice
+  turns keep the bridge's behaviour.
 - **Auto mode.** `iclaude auto-mode on` sets `permissions.defaultMode: "auto"` in
   `~/.claude/settings.json` (the only scope where Claude Code honours `auto`). The hook
   also passes `permission_mode="auto"` to bridge sessions when that is set, so it does
