@@ -50,6 +50,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude login` | Claude subscription login (rerun if credentials expire) |
 | `./iclaude setup` | Inkbox setup wizard and contact allowlist; rerun to reconfigure |
 | `./iclaude allow [+15551234567 \| me@icloud.com]` | Show or add authorised contacts (`--remove`, `--replace`) |
+| `./iclaude approve [on\|off calendar email …]` | Show or change which actions run without asking you first (see [Auto-approve](#auto-approve)) |
 | `./iclaude start` / `stop` / `restart` | Control the container |
 | `./iclaude status` | Container health plus preflight checks |
 | `./iclaude check [claude\|inkbox\|…]` | Preflight checks only, exit code 0 when they pass |
@@ -74,11 +75,44 @@ bridge on its own. Docker restarts it after crashes and reboots.
 - **Webhook signatures stay on.** A missing signing key or `INKBOX_REQUIRE_SIGNATURE=false` blocks startup.
 - **Approvals stay on.** Commands, edits and other risky tools are texted to you for approval
   (`1` allow, `2` always for this session, `3` deny). iClaude refuses to start if any Claude
-  settings file sets `bypassPermissions`.
+  settings file sets `bypassPermissions`. You can opt specific connector actions out of this
+  with [auto-approve](#auto-approve); shell commands and file edits always ask.
 - **Secrets stay out of the image and Git.** Credentials live only in the `home` volume, and
   the bridge's `.env` is mode 600.
 - **Container hardening.** Non-root user, read-only root filesystem, no capabilities,
   `no-new-privileges`, and no published ports (Inkbox reaches the bridge through an outbound tunnel).
+
+## Auto-approve
+
+By default Claude texts you for a yes before adding calendar events, sending email and other
+actions done for you. To skip that for routine actions:
+
+```bash
+iclaude approve                       # what is on and off
+iclaude approve on calendar email     # stop asking for these
+iclaude approve off email             # ask again
+iclaude approve off all               # back to the default
+```
+
+| Category | Covers |
+|---|---|
+| `calendar` | Creating, changing and RSVPing to calendar events (Fastmail or any connector with `create_event`-style tools) |
+| `email` | Sending, replying to, forwarding and drafting email (Fastmail, the Inkbox agent inbox) |
+| `deploy` | Deploying, promoting and rolling back through a connector such as Vercel |
+| `delete` | Any connector tool that deletes or removes something, including calendar events |
+| `pay` | Buying or paying for anything through a connector, such as a Vercel domain |
+
+Auto-approve does two things for the categories you turn on: the bridge stops texting an
+approval request for those connector tools, and Claude is told it no longer has to confirm
+them first. It still tells you in one line what it did. It applies only to connector (MCP)
+tools, so shell commands (`vercel deploy`, `rm`, `git push --force`), file edits and texts to
+other people always ask first. The change restarts the container; conversations resume.
+
+**The risk.** With `email` on, a mistaken request, or instructions hidden in an email or web
+page that Claude reads, could get an email sent before you see it. Claude is told to treat
+such content as information and to confirm anything it did not get from you directly, but that
+is an instruction to the model, not a hard block. Keep `deploy`, `delete` and `pay` off unless
+you really need them. With several authorised contacts, auto-approve applies to all of them.
 
 ## Conversations and memory
 
@@ -86,7 +120,8 @@ bridge on its own. Docker restarts it after crashes and reboots.
   resumes it after restarts. Text `/clear` to start fresh or `/resume` to pick an older one.
 - **Default personality.** On first start iClaude installs `~/.claude/CLAUDE.md` in the home
   volume: a brief, conversational assistant that confirms before acting for you (emails to
-  others, public posts, deploys, deletes, payments). Edit it with `./iclaude shell`. It is
+  others, public posts, deploys, deletes, payments) unless you turn on
+  [auto-approve](#auto-approve) for that kind of action. Edit it with `./iclaude shell`. It is
   never overwritten, so delete it and restart to get the latest default back. A repo's own
   `CLAUDE.md` in the workspace is loaded as well.
 - **Memory.** Claude Code's built-in auto memory and Inkbox's per-contact memories are both on.
@@ -249,7 +284,7 @@ Tested locally in Docker:
   also builds the production image from Debian packages
 
 Needs your accounts: the [live verification checklist](docs/VERIFY.md) covers subscription login,
-iMessage replies, approval texts, session persistence, the allowlist, confirmation rules and connectors.
+iMessage replies, approval texts, auto-approve, session persistence, the allowlist, confirmation rules and connectors.
 
 ## Development
 

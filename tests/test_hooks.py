@@ -77,3 +77,37 @@ def test_install_injects_tools_only_into_bridge_sessions(monkeypatch):
     assert other.options.mcp_servers == {}
     outside = sdk.ClaudeSDKClient(options=bridge_options)
     assert set(outside.options.mcp_servers) == {"inkbox"}
+
+
+
+def test_install_auto_approves_enabled_categories_and_tells_claude():
+    sdk = pytest.importorskip("claude_agent_sdk")
+    sessions = pytest.importorskip("inkbox_claude.sessions")
+    from inkbox_claude.tools import CURRENT_SESSION
+
+    hooks.install(None, lambda: {"ICLAUDE_AUTO_APPROVE": "calendar"})
+
+    async def escalate(*args, **kwargs):
+        return "3"
+
+    session = SimpleNamespace(reply_meta={}, _current_turn=SimpleNamespace(execution_observed=False),
+                              always_allowed=set(), companion_approver="", _escalate=escalate)
+
+    def decide(tool, meta=None):
+        session.reply_meta = meta or {}
+        return asyncio.run(sessions.ContactSession._can_use_tool(session, tool, {}, None))
+
+    assert isinstance(decide("mcp__claude_ai_Fastmail__create_event"), sdk.PermissionResultAllow)
+    assert session._current_turn.execution_observed
+    assert isinstance(decide("mcp__claude_ai_Fastmail__send_email"), sdk.PermissionResultDeny)
+    assert isinstance(decide("Bash"), sdk.PermissionResultDeny)
+    assert isinstance(decide("mcp__claude_ai_Fastmail__create_event", {"companion": True}), sdk.PermissionResultDeny)
+
+    options = sdk.ClaudeAgentOptions(mcp_servers={"inkbox": {"type": "sdk", "name": "inkbox", "instance": None}},
+                                     system_prompt={"type": "preset", "preset": "claude_code", "append": "bridge"})
+    token = CURRENT_SESSION.set(SimpleNamespace(reply_meta={}))
+    try:
+        client = sdk.ClaudeSDKClient(options=options)
+    finally:
+        CURRENT_SESSION.reset(token)
+    assert client.options.system_prompt["append"].startswith("bridge\n\n## Auto-approved actions")

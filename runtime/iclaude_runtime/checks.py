@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 
+from . import approvals
+
 TRUE_VALUES = {"1", "true", "yes", "on"}
 PHONE_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 EMAIL_RE = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
@@ -133,7 +135,7 @@ def _bypass_sources(paths: list[Path]) -> list[str]:
     return found
 
 
-def check_permissions(home: Path, project_dir: Path) -> Check:
+def check_permissions(home: Path, project_dir: Path, env: Mapping[str, str] | None = None) -> Check:
     candidates = [
         home / ".claude" / "settings.json",
         project_dir / ".claude" / "settings.json",
@@ -143,7 +145,12 @@ def check_permissions(home: Path, project_dir: Path) -> Check:
     if found:
         return Check("Permission prompts", False, f"bypassPermissions set in {', '.join(found)}",
                      "Remove permissions.defaultMode=bypassPermissions; iClaude never disables approvals")
-    return Check("Permission prompts", True, "dangerous tools require approval by text")
+    on, unknown = approvals.parse((env or {}).get(approvals.SETTING))
+    if unknown:
+        return Check("Permission prompts", False, f"unknown auto-approve categories: {', '.join(unknown)}",
+                     f"Rewrite it with ./iclaude approve on|off <{'|'.join(approvals.BY_NAME)}>")
+    auto = f"; auto-approved: {', '.join(on)}" if on else ""
+    return Check("Permission prompts", True, f"dangerous tools require approval by text{auto}")
 
 
 def check_workspace(project_dir: Path) -> Check:
@@ -163,6 +170,6 @@ def preflight(env: Mapping[str, str] | None = None) -> list[Check]:
         check_inkbox_identity(env),
         check_signature(env),
         check_allowlist(env),
-        check_permissions(Path.home(), project_dir),
+        check_permissions(Path.home(), project_dir, env),
         check_workspace(project_dir),
     ]

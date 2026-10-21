@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import sys
 
-from . import alerts, hooks, reminders, scheduler, usage
+from . import alerts, approvals, hooks, reminders, scheduler, usage
 from .checks import effective_env
 from .notify import owner
 
 
 def main() -> int:
     usage.install()
-    hooks.install(lambda: reminders.tool_server(effective_env))
+    hooks.install(lambda: reminders.tool_server(effective_env), effective_env)
     env = effective_env()
+    auto = approvals.enabled(env)
+    print(f"Auto-approve: {', '.join(auto) if auto else 'off'} (change with ./iclaude approve)", flush=True)
     phone, problem = owner(env)
     conf = alerts.settings(env)
     if problem:

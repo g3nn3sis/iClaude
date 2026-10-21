@@ -25,6 +25,9 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
 - "Usage reached" reply with the reset time when the Claude subscription limit is hit
 - Reminders and scheduled messages set by text (`remind`, `list_reminders` and
   `cancel_reminder` tools), plus `iclaude reminders`
+- Auto-approve (`iclaude approve on|off calendar email deploy delete pay|all`): routine
+  connector actions run without an approval text or confirmation; off by default, shell
+  commands and file edits always ask
 - Morning briefing (`iclaude briefing`), calendar heads-ups over CalDAV, a usage warning
   before the limit, and GitHub, Vercel and Cloudflare Pages alerts, all polled without
   Claude usage

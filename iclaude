@@ -29,6 +29,7 @@ Usage: ./iclaude <command>
   setup            Inkbox setup wizard and contact allowlist (stops the bridge while it runs)
   login            Log in to Claude with your Pro/Max subscription
   allow [contact]  Show or add authorised contacts (+E.164 phone or email); --remove, --replace
+  approve [on|off <category...>]  Actions that run without asking first: calendar, email, deploy, delete, pay, all
   start            Build if needed and start iClaude in the background
   stop             Stop iClaude
   restart          Restart iClaude
@@ -109,7 +110,7 @@ case "$cmd" in
       *) die "Usage: iclaude auto-update [on|off|status]" ;;
     esac
     ;;
-  alerts|briefing|voice)
+  alerts|briefing|voice|approve)
     in_container "$cmd" "$@"
     case "${1:-status}" in status|test) ;; *) if running; then compose restart iclaude; fi ;; esac
     ;;
