@@ -55,6 +55,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude check [claude\|inkbox\|…]` | Preflight checks only, exit code 0 when they pass |
 | `./iclaude logs [-f]` | Bridge logs |
 | `./iclaude doctor` | iClaude checks, bridge readiness and the upstream `inkbox-claude doctor` |
+| `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
 | `./iclaude update` | `git pull`, rebuild, restart (state is kept) |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
 
@@ -119,15 +120,12 @@ Tested locally in Docker:
 - `install.sh` on a clean home directory, both piped (`curl | bash` style, no terminal) and
   interactive (reaches the Claude sign-in prompt)
 - Default `CLAUDE.md` seeded on first start and left alone afterwards
-- Unit and contract tests (`python -m pytest`)
+- `iclaude connectors` runs a session and reads MCP status (logged-out path only)
+- Unit and contract tests (`python -m pytest`), plus the same checks in GitHub Actions CI, which
+  also builds the production image from Debian packages
 
-Needs your accounts (manual verification):
-
-1. `./iclaude login` completes and `./iclaude status` shows `Claude login: logged in (max, …)`.
-2. `./iclaude setup` completes, then iMessage the agent and get a reply.
-3. Ask it to run a command, receive the approval text, and reply `1`.
-4. `./iclaude restart`, text again, and check it remembers the conversation.
-5. Text from a number not on the allowlist and get no reply.
+Needs your accounts: the [live verification checklist](docs/VERIFY.md) covers subscription login,
+iMessage replies, approval texts, session persistence, the allowlist, confirmation rules and connectors.
 
 ## Development
 

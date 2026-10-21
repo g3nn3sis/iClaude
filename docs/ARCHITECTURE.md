@@ -73,9 +73,11 @@ without one.
   with `ICLAUDE_SHARED_MEMORY=true`). Files in `/workspace` are still shared, so the
   recommended setup is a single owner contact. Full isolation would need per-contact
   workspaces, which the bridge does not support today.
-- **Connectors.** Claude.ai remote connectors (GitHub, Fastmail, Vercel, Cloudflare)
-  should load in a session logged in with the subscription account, but this
-  has not yet been verified inside a bridged session.
+- **Connectors.** Claude.ai remote connectors load from the logged-in account, with no
+  MCP configuration in iClaude. `iclaude connectors` opens a session with the bridge's
+  setting sources and reads the live MCP status without a model turn. Connector tools are
+  not in the bridge's auto-allowed list, so each call is approved by text. This has not
+  yet been checked against a real account.
 
 ## Phases
 
@@ -84,7 +86,7 @@ without one.
 | 1. Research | Inspect bridge, decide architecture (this document) | Done |
 | 2. Docker MVP | Image, Compose, volumes, login, preflight, host CLI | Done; live auth untested |
 | 3. Easy install | `install.sh` for fresh VPS, default conversational CLAUDE.md, memory defaults | Done; live auth untested |
-| 4. Test & release | Live E2E checklist, connector verification, CI, v0.1.0 | Next |
+| 4. Test & release | Live checklist (`docs/VERIFY.md`), `iclaude connectors`, CI, v0.1.0 changelog | Done; tag after live verification |
 
 ## Pinned versions
 
