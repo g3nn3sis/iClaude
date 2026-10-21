@@ -129,6 +129,8 @@ def install(tool_factory=None, env_factory=None) -> None:
                     mcp_servers={**servers, TOOL_SERVER: server},
                     allowed_tools=list(options.allowed_tools) + [f"mcp__{TOOL_SERVER}__{n}" for n in names],
                 )
+            if options.permission_mode is None and approvals.auto_mode(Path.home()):
+                options = dataclasses.replace(options, permission_mode="auto")
             note = approvals.prompt_text(_bridge["env"]())
             prompt = options.system_prompt
             if note and isinstance(prompt, dict) and prompt.get("type") == "preset":

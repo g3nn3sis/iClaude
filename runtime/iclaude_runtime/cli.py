@@ -108,6 +108,27 @@ def cmd_approve(action: str, names: list[str]) -> int:
     return 0
 
 
+def cmd_auto_mode(action: str) -> int:
+    home = Path.home()
+    if action in ("on", "off"):
+        try:
+            approvals.set_auto_mode(home, action == "on")
+        except ValueError as exc:
+            print(f"{RED}{exc}{RESET}")
+            return 1
+    if approvals.auto_mode(home):
+        print("Claude Code auto mode is on: a safety classifier approves routine actions instead of texting you.")
+        print("It still blocks risky ones (production deploys, force pushes, mass deletes, leaking data). If it blocks")
+        print("the same thing repeatedly you get the usual approval text. Turn off with: ./iclaude auto-mode off")
+        if action == "on" and not approvals.enabled(effective_env()):
+            print("Claude may still double-check in chat before email or calendar changes (CLAUDE.md).")
+            print("To skip that too: ./iclaude approve on calendar email")
+    else:
+        print("Claude Code auto mode is off: actions outside the read-only set are texted to you for approval.")
+        print("Turn on with: ./iclaude auto-mode on")
+    return 0
+
+
 def _ask_allowlist() -> None:
     from inkbox_claude import setup_wizard as w
 
@@ -239,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     approve = sub.add_parser("approve", help="show or change which actions run without asking you first")
     approve.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
     approve.add_argument("categories", nargs="*", help=f"{', '.join(approvals.BY_NAME)} or all")
+    auto_mode = sub.add_parser("auto-mode", help="Claude Code auto mode: a classifier approves routine actions")
+    auto_mode.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
     allow.add_argument("contacts", nargs="*")
     allow.add_argument("--replace", action="store_true", help="replace the list instead of adding")
@@ -268,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
         from .connectors import report
 
         return report()
+    if args.command == "auto-mode":
+        return cmd_auto_mode(args.action)
     if args.command == "approve":
         return cmd_approve(args.action, args.categories)
     if args.command == "allow":

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from iclaude_runtime import approvals, checks, cli
@@ -93,3 +95,30 @@ def test_preflight_shows_auto_approve_and_rejects_typos(tmp_path):
     result = checks.check_permissions(home, project, {approvals.SETTING: "calendar,email"})
     assert result.ok and "auto-approved: calendar, email" in result.detail
     assert not checks.check_permissions(home, project, {approvals.SETTING: "calender"}).ok
+
+
+def test_auto_mode_round_trip_keeps_other_settings(tmp_path):
+    path = approvals.user_settings_path(tmp_path)
+    assert not approvals.auto_mode(tmp_path)
+    path.parent.mkdir()
+    path.write_text('{"model": "opus", "permissions": {"allow": ["Read"]}}')
+    approvals.set_auto_mode(tmp_path, True)
+    assert approvals.auto_mode(tmp_path)
+    assert json.loads(path.read_text()) == {"model": "opus", "permissions": {"allow": ["Read"], "defaultMode": "auto"}}
+    approvals.set_auto_mode(tmp_path, False)
+    assert json.loads(path.read_text()) == {"model": "opus", "permissions": {"allow": ["Read"]}}
+    path.write_text("{broken")
+    with pytest.raises(ValueError):
+        approvals.set_auto_mode(tmp_path, True)
+
+
+def test_auto_mode_command_and_preflight(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("INKBOX_CLAUDE_ENV_FILE", str(tmp_path / ".env"))
+    monkeypatch.delenv(approvals.SETTING, raising=False)
+    assert cli.cmd_auto_mode("on") == 0
+    assert "auto mode is on" in capsys.readouterr().out
+    result = checks.check_permissions(tmp_path, tmp_path / "work", {})
+    assert result.ok and "auto mode" in result.detail
+    assert cli.cmd_auto_mode("off") == 0
+    assert not approvals.auto_mode(tmp_path)

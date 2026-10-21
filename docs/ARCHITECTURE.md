@@ -120,6 +120,12 @@ without one.
   sessions' system prompt so Claude stops asking for confirmation in those categories,
   which overrides the confirmation list in an existing `CLAUDE.md`. Connector tool names
   have not been checked against a real account.
+- **Auto mode.** `iclaude auto-mode on` sets `permissions.defaultMode: "auto"` in
+  `~/.claude/settings.json` (the only scope where Claude Code honours `auto`). The hook
+  also passes `permission_mode="auto"` to bridge sessions when that is set, so it does
+  not depend on how the SDK resolves the default. The classifier then decides tool calls
+  that are not already allowed; the bridge's `can_use_tool` text approval is only the
+  fallback after repeated blocks. `bypassPermissions` stays refused by preflight.
 
 ## Phases
 

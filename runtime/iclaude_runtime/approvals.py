@@ -7,7 +7,9 @@ Built-in tools such as Bash, Write and Edit are never auto-approved here.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Mapping
 
 SETTING = "ICLAUDE_AUTO_APPROVE"
@@ -93,3 +95,42 @@ def prompt_text(env: Mapping[str, str]) -> str:
 def status_lines(env: Mapping[str, str]) -> list[str]:
     on = enabled(env)
     return [f"{'on ' if c.name in on else 'off'}  {c.name:<9} {c.summary}" for c in CATEGORIES]
+
+
+def user_settings_path(home: Path) -> Path:
+    return home / ".claude" / "settings.json"
+
+
+def _read_settings(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def auto_mode(home: Path) -> bool:
+    """Whether Claude Code's auto mode (classifier-reviewed actions) is the user's default."""
+    permissions = _read_settings(user_settings_path(home)).get("permissions")
+    return isinstance(permissions, dict) and permissions.get("defaultMode") == "auto"
+
+
+def set_auto_mode(home: Path, on: bool) -> None:
+    """Set or clear permissions.defaultMode=auto in ~/.claude/settings.json, keeping everything else."""
+    path = user_settings_path(home)
+    if path.exists() and not _read_settings(path) and path.read_text().strip():
+        raise ValueError(f"{path} is not valid JSON; fix or remove it first")
+    data = _read_settings(path)
+    permissions = data.get("permissions") if isinstance(data.get("permissions"), dict) else {}
+    if on:
+        permissions["defaultMode"] = "auto"
+    elif permissions.get("defaultMode") == "auto":
+        del permissions["defaultMode"]
+    if permissions:
+        data["permissions"] = permissions
+    else:
+        data.pop("permissions", None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)

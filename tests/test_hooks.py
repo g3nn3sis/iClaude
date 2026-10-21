@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from iclaude_runtime import hooks, notify
+from iclaude_runtime import approvals, hooks, notify
 
 
 def test_remember_chat_and_add_context(tmp_path, monkeypatch):
@@ -80,7 +80,7 @@ def test_install_injects_tools_only_into_bridge_sessions(monkeypatch):
 
 
 
-def test_install_auto_approves_enabled_categories_and_tells_claude():
+def test_install_auto_approves_enabled_categories_and_tells_claude(tmp_path, monkeypatch):
     sdk = pytest.importorskip("claude_agent_sdk")
     sessions = pytest.importorskip("inkbox_claude.sessions")
     from inkbox_claude.tools import CURRENT_SESSION
@@ -105,9 +105,14 @@ def test_install_auto_approves_enabled_categories_and_tells_claude():
 
     options = sdk.ClaudeAgentOptions(mcp_servers={"inkbox": {"type": "sdk", "name": "inkbox", "instance": None}},
                                      system_prompt={"type": "preset", "preset": "claude_code", "append": "bridge"})
+    monkeypatch.setattr(hooks.Path, "home", classmethod(lambda cls: tmp_path))
     token = CURRENT_SESSION.set(SimpleNamespace(reply_meta={}))
     try:
-        client = sdk.ClaudeSDKClient(options=options)
+        manual = sdk.ClaudeSDKClient(options=options)
+        approvals.set_auto_mode(tmp_path, True)
+        auto = sdk.ClaudeSDKClient(options=options)
     finally:
         CURRENT_SESSION.reset(token)
-    assert client.options.system_prompt["append"].startswith("bridge\n\n## Auto-approved actions")
+    assert manual.options.system_prompt["append"].startswith("bridge\n\n## Auto-approved actions")
+    assert manual.options.permission_mode is None
+    assert auto.options.permission_mode == "auto"

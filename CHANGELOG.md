@@ -28,6 +28,8 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
 - Auto-approve (`iclaude approve on|off calendar email deploy delete pay|all`): routine
   connector actions run without an approval text or confirmation; off by default, shell
   commands and file edits always ask
+- Claude Code auto mode (`iclaude auto-mode on|off`): sets `permissions.defaultMode` to `auto`
+  in the user settings, so a safety classifier approves routine actions instead of texts
 - Morning briefing (`iclaude briefing`), calendar heads-ups over CalDAV, a usage warning
   before the limit, and GitHub, Vercel and Cloudflare Pages alerts, all polled without
   Claude usage

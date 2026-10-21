@@ -149,8 +149,10 @@ def check_permissions(home: Path, project_dir: Path, env: Mapping[str, str] | No
     if unknown:
         return Check("Permission prompts", False, f"unknown auto-approve categories: {', '.join(unknown)}",
                      f"Rewrite it with ./iclaude approve on|off <{'|'.join(approvals.BY_NAME)}>")
+    mode = "auto mode: a classifier reviews actions, blocked ones ask by text" if approvals.auto_mode(home) \
+        else "dangerous tools require approval by text"
     auto = f"; auto-approved: {', '.join(on)}" if on else ""
-    return Check("Permission prompts", True, f"dangerous tools require approval by text{auto}")
+    return Check("Permission prompts", True, f"{mode}{auto}")
 
 
 def check_workspace(project_dir: Path) -> Check:
