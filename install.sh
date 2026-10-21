@@ -102,6 +102,19 @@ else
   "$DIR/iclaude" setup </dev/tty
 fi
 
+step "Automatic updates"
+if "$DIR/iclaude" auto-update status 2>/dev/null | grep -q "is on"; then
+  ok "Already on"
+elif ! command -v crontab >/dev/null 2>&1; then
+  warn "cron is not installed; skipping. Install it (sudo apt-get install -y cron), then run: $ICLAUDE auto-update on"
+else
+  read -r -p "  Check for iClaude updates daily and apply them automatically? [Y/n] " answer </dev/tty || answer=n
+  case "$answer" in
+    n|N|no|NO) ok "Left off. Turn it on later with: $ICLAUDE auto-update on" ;;
+    *) "$DIR/iclaude" auto-update on ;;
+  esac
+fi
+
 step "Status"
 if "$DIR/iclaude" check </dev/tty; then
   echo

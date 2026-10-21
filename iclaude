@@ -37,7 +37,9 @@ Usage: ./iclaude <command>
   logs [-f]        Show bridge logs
   doctor           Full diagnostics (iClaude + Inkbox bridge doctor)
   connectors       Which Claude connectors (GitHub, Fastmail, Vercel, Cloudflare...) the bridge can use
-  update           Pull the latest iClaude, rebuild and restart
+  update           Pull the latest iClaude, rebuild and restart (rolls back if checks fail)
+  auto-update [on|off|status]  Daily automatic updates via cron
+  uninstall [--purge]          Remove iClaude; --purge also deletes your data
   shell            Open a shell inside the container
 EOF
 }
@@ -70,11 +72,37 @@ case "$cmd" in
   logs) compose logs --tail=200 "$@" iclaude ;;
   doctor) in_container doctor ;;
   connectors) in_container connectors ;;
-  update)
-    if [ -d .git ]; then git pull --ff-only; fi
-    compose build --pull
-    compose up -d
+  update) exec "$PWD/scripts/update.sh" "$@" ;;
+  auto-update)
+    cron_mark="# iclaude-auto-update"
+    log_file="${XDG_STATE_HOME:-$HOME/.local/state}/iclaude/update.log"
+    case "${1:-status}" in
+      on|enable)
+        command -v crontab >/dev/null 2>&1 || die "cron is not installed. Install it with: sudo apt-get install -y cron"
+        mkdir -p "$(dirname "$log_file")"
+        minute="$(crontab -l 2>/dev/null | grep -F "$cron_mark" | awk '{print $1; exit}' || true)"
+        line="${minute:-$((RANDOM % 60))} 4 * * * $PWD/scripts/update.sh --auto >> $log_file 2>&1 $cron_mark"
+        { crontab -l 2>/dev/null | grep -vF "$cron_mark" || true; echo "$line"; } | crontab -
+        echo "Auto-update on: checks daily at 04:$(printf %02d "${line%% *}") server time. Log: $log_file"
+        ;;
+      off|disable)
+        if command -v crontab >/dev/null 2>&1; then
+          { crontab -l 2>/dev/null | grep -vF "$cron_mark" || true; } | crontab -
+        fi
+        echo "Auto-update off."
+        ;;
+      status)
+        if command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -qF "$cron_mark"; then
+          echo "Auto-update is on."
+        else
+          echo "Auto-update is off. Turn it on with: iclaude auto-update on"
+        fi
+        if [ -f "$log_file" ]; then echo "Recent updates:"; tail -n 5 "$log_file"; fi
+        ;;
+      *) die "Usage: iclaude auto-update [on|off|status]" ;;
+    esac
     ;;
+  uninstall) exec "$PWD/uninstall.sh" "$@" ;;
   shell) in_container shell ;;
   help|-h|--help) usage ;;
   *) usage; exit 1 ;;

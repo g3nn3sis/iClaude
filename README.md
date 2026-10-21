@@ -56,7 +56,9 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude logs [-f]` | Bridge logs |
 | `./iclaude doctor` | iClaude checks, bridge readiness and the upstream `inkbox-claude doctor` |
 | `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
-| `./iclaude update` | `git pull`, rebuild, restart (state is kept) |
+| `./iclaude update` | Pull the latest version, rebuild and restart; rolls back if checks start failing |
+| `./iclaude auto-update [on\|off\|status]` | Daily automatic updates (cron, around 04:00 server time) |
+| `./iclaude uninstall [--purge]` | Remove iClaude; `--purge` also deletes your data |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
 
 ## Security model
@@ -95,6 +97,32 @@ bridge on its own. Docker restarts it after crashes and reboots.
 
 Back up with `docker run --rm -v iclaude_home:/v -v "$PWD":/b alpine tar czf /b/home.tgz -C /v .`
 while iClaude is stopped. `docker compose down -v` **deletes** all state.
+
+## Updates
+
+`iclaude update` fast-forwards the checkout, rebuilds the image and restarts the container.
+Your data is kept. If iClaude was passing all its checks before the update and stops passing
+them within three minutes afterwards, it rolls back to the previous version and image on its own.
+
+`iclaude auto-update on` runs the same update daily from cron. It does nothing when there
+are no new commits, except once a week, when it rebuilds anyway to pick up Debian security
+updates. It never retries a version it had to roll back; run `iclaude update` to retry that one by
+hand. Results are logged to `~/.local/state/iclaude/update.log` and shown by
+`iclaude auto-update status`. Auto-update follows the branch you installed (default `master`),
+so every change merged there reaches your server. Install with `--ref <tag>` to stay on a
+fixed release; updates are then manual.
+
+## Uninstall
+
+```bash
+iclaude uninstall           # remove the container, image, command, auto-update and checkout; keep data
+iclaude uninstall --purge   # also delete the Claude login, Inkbox config, conversations and workspace
+```
+
+Both ask before doing anything. `--purge` also asks you to type `delete`. `--yes` skips the
+prompts and `--keep-files` keeps the checkout. A later reinstall picks up kept data. Your
+Inkbox agent and its webhooks are not touched; remove them in the Inkbox Console if you no
+longer need them.
 
 ## Troubleshooting
 
