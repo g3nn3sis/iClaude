@@ -149,6 +149,8 @@ without one.
 
 ## Phases
 
+The phases below built v0.1. The goal and the roadmap from here are in [GOAL.md](GOAL.md).
+
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Research | Inspect bridge, decide architecture (this document) | Done |

@@ -360,4 +360,5 @@ iMessage replies, approval texts, auto-approve, session persistence, the allowli
 python -m pytest            # host-side unit tests
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, the pinned versions and the roadmap.
+See [docs/GOAL.md](docs/GOAL.md) for the project goal and roadmap, and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the pinned versions.
