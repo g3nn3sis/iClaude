@@ -12,7 +12,8 @@ or a dashboard. Every feature is judged by three questions:
 1. **Effortless.** Does it work after one command and a few prompts, with no knowledge of Docker,
    Inkbox, MCP or the Agent SDK?
 2. **Trustworthy.** Does it keep strangers out, keep secrets off disk images and out of logs, and
-   ask before anything outward or irreversible?
+   stay safe by default: asking before anything outward or irreversible unless the owner has
+   chosen to auto-approve it?
 3. **Hands-off.** Does it keep running through reboots, updates, expired logins and usage limits,
    and tell you by text when it needs you?
 
@@ -26,7 +27,7 @@ A change that makes one of these worse needs a very good reason.
 | Proven on real accounts | Every row of [VERIFY.md](VERIFY.md) passes on a real VPS, recorded in the release notes, for every release |
 | Always on | 30 days of uptime on one VPS with auto-update on: no manual restart, no lost conversation, no missed reminder |
 | Self-healing | Expired Claude login, Inkbox disconnect and usage limit each produce a text to the owner with the exact fix, within 5 minutes |
-| Safe by default | No path from an unlisted sender, an email body or a webhook to a tool call; covered by tests and checked live |
+| Safe by default | No path from an unlisted sender, an email body or a webhook to a tool call; anything auto-approved is only what the owner turned on; covered by tests and checked live |
 | Private per contact | Each authorised contact has its own sessions, memory and files; one contact cannot read another's |
 | Reachable everywhere | Replies and unprompted messages work over iMessage, SMS and email, not iMessage only |
 | Maintainable | CI green on every PR, pinned bridge and Claude Code versions, upgrades checked by the live checklist |
@@ -86,5 +87,6 @@ files, memory or sessions, and auto memory stays on for both.
 
 - A web dashboard, database or multi-tenant hosting.
 - Rebuilding what the Inkbox bridge or Claude Code already do; changes go upstream where possible.
-- Disabling permission prompts globally or requiring an Anthropic API key.
+- Turning off permission checks for everything (`bypassPermissions`) or requiring an Anthropic
+  API key. Auto-approve and auto mode stay opt-in, per category, chosen by the owner.
 - Device control (phone or desktop automation) before 1.0.
