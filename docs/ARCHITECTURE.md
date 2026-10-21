@@ -48,7 +48,7 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
    is replaced by Docker's restart policy. After the wizard it asks for the
    allowlist.
 7. **Host CLI** (`./iclaude`): setup, login, allow, start, stop, restart, status, check,
-   logs, doctor, update, shell.
+   logs, doctor, connectors, alerts, update, auto-update, reset, uninstall, shell.
 8. **Installer** (`install.sh`): checks Docker, clones or updates the repo, links the CLI,
    starts the container, then runs login and setup only when their checks fail.
 9. **Conversational defaults**: a user-level `~/.claude/CLAUDE.md` seeded once (never
@@ -56,6 +56,27 @@ Inspected at commit `a02722d` (v0.2.14, 2026-10-08).
    actions. The bridge auto-allows its own Inkbox send tools, so this is the guard against
    messaging third parties unasked. No custom memory system: Claude Code auto memory
    plus Inkbox contact memories cover it.
+
+10. **Bridge launcher** (`iclaude_runtime/bridge.py`): starts the upstream `inkbox-claude run`
+    in-process after two additions, so the bridge itself stays unmodified:
+    - **Usage-limit reply.** `ClaudeSDKClient.receive_response` is wrapped so that a turn
+      ending in Claude's subscription limit (an assistant `error="rate_limit"`, a rejected
+      `RateLimitEvent`, or the CLI's "hit your limit" result) is answered with
+      "Usage reached. Claude is available again at 17:00 (BST)." instead of the raw CLI line.
+      Successful turns are never rewritten.
+    - **Email alerts** (`iclaude_runtime/alerts.py`, off by default). A background thread
+      polls the Inkbox agent inbox (Inkbox SDK) and, optionally, Fastmail (JMAP with a
+      read-only API token) every 10 minutes for mail newer than its last cursor. New mail
+      goes to one Claude turn (Haiku by default) with **no tools, no MCP servers, no
+      settings or CLAUDE.md** and a deny-all permission callback. The emails are labelled as
+      untrusted data. Claude answers with JSON naming which emails need the owner, why, and
+      a suggested reply. iClaude itself, not Claude, sends one iMessage to the owner. The
+      owner must be an authorised phone number. Links in Claude's output are removed, so a
+      phishing email cannot turn the alert into a link from "iClaude". Cursors only advance
+      after triage and sending succeed. A usage limit pauses polling until the reset, and
+      after three failed attempts a batch is skipped so it cannot burn usage forever.
+      Senders on the allowlist and the agent's own address are skipped, because the bridge
+      already treats those emails as conversations.
 
 ### Security decision: local allowlist
 

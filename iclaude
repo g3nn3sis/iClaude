@@ -39,6 +39,7 @@ Usage: ./iclaude <command>
   connectors       Which Claude connectors (GitHub, Fastmail, Vercel, Cloudflare...) the bridge can use
   update           Pull the latest iClaude, rebuild and restart (rolls back if checks fail)
   auto-update [on|off|status]  Daily automatic updates via cron
+  alerts [status|on|off|fastmail|test]  iMessage alerts for new email that needs you
   reset [--yes]                Forget conversations, memory and workspace; keep logins and config
   uninstall [--purge]          Remove iClaude; --purge also deletes your data
   shell            Open a shell inside the container
@@ -102,6 +103,10 @@ case "$cmd" in
         ;;
       *) die "Usage: iclaude auto-update [on|off|status]" ;;
     esac
+    ;;
+  alerts)
+    in_container alerts "$@"
+    case "${1:-}" in on|off|fastmail) if running; then compose restart iclaude; fi ;; esac
     ;;
   reset)
     [ $# -eq 0 ] || [ "$1" = "--yes" ] || die "Usage: iclaude reset [--yes]"

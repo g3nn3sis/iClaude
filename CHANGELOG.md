@@ -19,6 +19,10 @@ First release. Tag it after the [live verification](docs/VERIFY.md) passes.
 - `iclaude connectors` reports which claude.ai connectors a bridged session can reach
 - `iclaude update` with automatic rollback, `iclaude auto-update on|off|status` (daily cron),
   and `iclaude uninstall [--purge]`
+- Email alerts (`iclaude alerts`): opt-in iMessage alerts for new mail in the Inkbox
+  agent inbox and Fastmail that needs you, with suggested replies, triaged by a tool-less
+  Claude turn
+- "Usage reached" reply with the reset time when the Claude subscription limit is hit
 - `iclaude reset`: factory reset that forgets conversations, memory and workspace files but
   keeps the Claude login, Inkbox config and authorised contacts
 - CI: unit and contract tests, ShellCheck, production image build, container and installer

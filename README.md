@@ -58,6 +58,7 @@ bridge on its own. Docker restarts it after crashes and reboots.
 | `./iclaude connectors` | Which claude.ai connectors (GitHub, Fastmail, Vercel, Cloudflare, …) a bridged session can reach |
 | `./iclaude update` | Pull the latest version, rebuild and restart; rolls back if checks start failing |
 | `./iclaude auto-update [on\|off\|status]` | Daily automatic updates (cron, around 04:00 server time) |
+| `./iclaude alerts [on\|off\|fastmail\|test]` | iMessage alerts for new email that needs you (Inkbox inbox, optional Fastmail) |
 | `./iclaude reset` | Factory reset: forget conversations, memory and workspace files, keep logins and config |
 | `./iclaude uninstall [--purge]` | Remove iClaude; `--purge` also deletes your data |
 | `./iclaude shell` | Shell inside the container (`claude`, `gh`, `git` available) |
@@ -88,6 +89,47 @@ bridge on its own. Docker restarts it after crashes and reboots.
   Auto memory is per workspace, so it is turned off automatically when more than one contact
   is authorised. That keeps contacts from seeing each other's facts. Set
   `ICLAUDE_SHARED_MEMORY=true` in `.env` next to `compose.yaml` only if every contact may share it.
+
+## Email alerts
+
+Off by default. With alerts on, iClaude checks the agent's Inkbox inbox every 10 minutes,
+plus your Fastmail inbox if you connect it. When something new needs you, you get one
+iMessage like:
+
+```
+1 email needs you:
+
+Fastmail: Jane Doe <jane@example.com>
+"Contract changes"
+Wants your sign-off on section 4 by Friday.
+Suggested reply: Thanks Jane, I'll review it and get back to you by Thursday.
+```
+
+The alert is not part of your conversation history, so when you answer, name the email
+("reply to Jane's contract email with that suggestion"). Claude finds it through Inkbox or your
+Fastmail connector and confirms before sending, as usual.
+
+```bash
+iclaude alerts on        # alerts go to your first authorised phone number (or --to +1555...)
+iclaude alerts fastmail  # paste a Fastmail API token; create it with read-only Email access
+iclaude alerts test      # dry run over the last 24 hours
+iclaude alerts off
+```
+
+How it stays safe: Claude reads the new mail in a separate turn with **no tools at all**, so
+a malicious email cannot make it run commands or send anything. iClaude sends the alert, and
+only to an authorised phone number. Links are stripped from alerts. Mail from your own
+authorised addresses is skipped, because the bridge already answers those as conversations.
+Fetching an Inkbox email marks it read in the agent's inbox. Fastmail is read only, so
+nothing changes there. Each check with new mail costs one small Claude (Haiku) turn against
+your subscription. Change the interval with `ICLAUDE_ALERT_INTERVAL` (minutes) and the
+model with `ICLAUDE_ALERT_MODEL` in the bridge `.env`.
+
+## Usage limit
+
+When your Claude plan's limit is reached, iClaude answers texts with "Usage reached. Claude
+is available again at 17:00 (BST)." (the reset time is shown when Claude reports it) instead
+of the raw Claude Code error. Email alerts pause until the limit resets, and no mail is lost.
 
 ## Where state lives
 

@@ -52,7 +52,7 @@ def cmd_run() -> int:
     print("iClaude preflight passed:", flush=True)
     _print_checks(checks)
     print(f"  Memory: {memory_environment(effective_env())}", flush=True)
-    os.execvp("inkbox-claude", ["inkbox-claude", "run"])
+    os.execv(sys.executable, [sys.executable, "-m", "iclaude_runtime.bridge"])
 
 
 def _save(name: str, value: str) -> None:
@@ -188,6 +188,69 @@ def cmd_reset(confirmed: bool) -> int:
     return 0
 
 
+def cmd_alerts(action: str, to: str | None, lookback_hours: float, send: bool) -> int:
+    from datetime import timedelta
+    import asyncio
+    import getpass
+
+    from . import alerts
+
+    env = effective_env()
+    if action == "on":
+        conf = alerts.settings({**env, "ICLAUDE_ALERTS": "true", **({"ICLAUDE_ALERT_TO": to} if to else {})})
+        if conf.problem:
+            print(f"{RED}{conf.problem}{RESET}")
+            return 1
+        if to:
+            _save("ICLAUDE_ALERT_TO", to)
+        _save("ICLAUDE_ALERTS", "true")
+        print(f"Email alerts on. They go to {conf.recipient} as iMessages.")
+        return 0
+    if action == "off":
+        _save("ICLAUDE_ALERTS", "false")
+        print("Email alerts off.")
+        return 0
+    if action == "fastmail":
+        print("Create a token at Fastmail > Settings > Privacy & Security > API tokens, with read-only Email access.")
+        token = getpass.getpass("Fastmail API token (input hidden, empty to remove): ").strip()
+        if not token:
+            _save("FASTMAIL_API_TOKEN", "")
+            print("Fastmail removed from email alerts.")
+            return 0
+        try:
+            alerts.FastmailSource(token).session()
+        except Exception as exc:
+            print(f"{RED}Fastmail rejected the token ({type(exc).__name__}). Nothing was saved.{RESET}")
+            return 1
+        _save("FASTMAIL_API_TOKEN", token)
+        print(f"{GREEN}Fastmail connected.{RESET} New inbox mail is included in email alerts.")
+        return 0
+    conf = alerts.settings(env)
+    if action == "test":
+        if conf.problem and send:
+            print(f"{RED}{conf.problem}{RESET}")
+            return 1
+        summary, message = alerts.run_cycle(
+            env, {}, alerts.make_sources(env, conf),
+            lambda prompt: asyncio.run(alerts.ask_claude(prompt, conf.model)),
+            alerts.imessage_sender(env, conf.recipient) if send else None,
+            lookback=timedelta(hours=lookback_hours),
+        )
+        print(summary)
+        print(("Sent:" if send else "Would send:") + "\n\n" + message if message else "Nothing needs your attention.")
+        return 0
+    state = alerts.load_state()
+    print(f"Email alerts: {'on' if conf.enabled else 'off'}")
+    print(f"  Recipient: {conf.recipient or '(none)'}" + (f"  {RED}{conf.problem}{RESET}" if conf.problem else ""))
+    print(f"  Sources: Inkbox inbox{', Fastmail' if conf.fastmail_token else ' (Fastmail not connected)'}")
+    print(f"  Every {conf.interval} min, model {conf.model}")
+    if state.get("last_run"):
+        print(f"  Last check: {state['last_run']}")
+    if not conf.enabled:
+        print("Turn on with: iclaude alerts on")
+    return 0
+
+
 def cmd_healthcheck() -> int:
     result = _probe("/ready")
     return 0 if result and result.get("ready") else 1
@@ -204,6 +267,11 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("names", nargs="*", help="only these checks, e.g. claude, inkbox, webhook, authorised")
     sub.add_parser("healthcheck", help="Docker health probe")
     sub.add_parser("connectors", help="list the MCP connectors a bridged Claude session can reach")
+    alert = sub.add_parser("alerts", help="iMessage alerts for new email that needs you")
+    alert.add_argument("action", nargs="?", default="status", choices=["status", "on", "off", "fastmail", "test"])
+    alert.add_argument("--to", help="phone number to alert (+E.164, must be an authorised contact)")
+    alert.add_argument("--hours", type=float, default=24, help="test: how far back to look")
+    alert.add_argument("--send", action="store_true", help="test: actually send the iMessage")
     reset = sub.add_parser("reset", help="forget conversations, memory and workspace files; keep logins and config")
     reset.add_argument("--yes", action="store_true", help="delete (otherwise only list what would be removed)")
     allow = sub.add_parser("allow", help="authorise contacts (phone +E.164 or email)")
@@ -226,6 +294,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if all(c.ok for c in checks) else 1
     if args.command == "healthcheck":
         return cmd_healthcheck()
+    if args.command == "alerts":
+        return cmd_alerts(args.action, args.to, args.hours, args.send)
     if args.command == "reset":
         return cmd_reset(args.yes)
     if args.command == "connectors":
